@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import authRoutes from './routes/auth.js';
+import boardsRoutes from './routes/boards.js';
+import listsRoutes from './routes/lists.js';
+import cardsRoutes from './routes/cards.js';
 import { errorHandler, AppError } from './middleware/errorHandler.js';
 
 const app = express();
@@ -18,8 +21,11 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routes
+// REST API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/boards', boardsRoutes);
+app.use('/api/lists', listsRoutes);
+app.use('/api/cards', cardsRoutes);
 
 // 404 Handler
 app.use('*', (req, res, next) => {
