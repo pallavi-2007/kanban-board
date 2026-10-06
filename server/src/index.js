@@ -2,6 +2,7 @@ import http from 'http';
 import dotenv from 'dotenv';
 import { Server } from 'socket.io';
 import app from './app.js';
+import { connectDB } from './config/db.js';
 
 dotenv.config();
 
@@ -24,8 +25,18 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-});
+const startServer = async () => {
+  try {
+    await connectDB();
+    server.listen(PORT, () => {
+      console.log(`Server listening on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error.message);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export { server, io };
