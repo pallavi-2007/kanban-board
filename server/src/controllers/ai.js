@@ -5,7 +5,8 @@ import Board from '../models/Board.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { broadcast } from '../lib/broadcaster.js';
 
-export const GEMINI_MODEL = 'gemini-2.5-flash';
+export const GEMINI_MODEL = 'gemini-3.8-flash';
+const AI_TIMEOUT_MS = 90000;
 
 export const breakdownCard = async (req, res, next) => {
   try {
@@ -32,32 +33,52 @@ export const breakdownCard = async (req, res, next) => {
     }
 
     let subtasks = [];
+    let timeoutId;
+
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
         throw new Error('GEMINI_API_KEY is not configured');
       }
 
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = `Break down the following kanban card task into 4 to 8 concise, actionable subtasks.
-Card Title: ${card.title}
-${card.description ? `Card Description: ${card.description}` : ''}
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: { timeout: AI_TIMEOUT_MS }
+      });
 
-Output strictly a JSON array of strings containing the subtask names (between 4 and 8 items).`;
+      const prompt = `Title: ${card.title}
+${card.description ? `Description: ${card.description}` : ''}
 
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.STRING
+Provide 4 to 8 short subtasks (max 8 words each) as a JSON array of strings. No extra text.`;
+
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('AI request timed out after 90 seconds'));
+        }, AI_TIMEOUT_MS);
+      });
+
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: prompt,
+          config: {
+            maxOutputTokens: 2000,
+            thinkingConfig: {
+              thinkingBudget: 0
+            },
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.STRING
+              }
             }
           }
-        }
-      });
+        }),
+        timeoutPromise
+      ]);
+
+      clearTimeout(timeoutId);
 
       let raw = response.text?.trim() || '';
       if (raw.startsWith('```')) {
@@ -78,9 +99,13 @@ Output strictly a JSON array of strings containing the subtask names (between 4 
         throw new Error('No valid subtasks found');
       }
     } catch (geminiError) {
+      clearTimeout(timeoutId);
       console.error('Gemini breakdown error:', geminiError.message);
+      const isTimeout = geminiError.message?.toLowerCase().includes('timed out');
       return res.status(502).json({
-        message: 'Failed to generate task breakdown from AI service'
+        message: isTimeout
+          ? 'AI request timed out after 90 seconds'
+          : 'Failed to generate task breakdown from AI service'
       });
     }
 

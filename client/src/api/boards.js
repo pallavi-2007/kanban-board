@@ -44,3 +44,13 @@ export const moveListApi = async (listId, newIndex) => {
   const response = await api.patch(`/lists/${listId}/move`, { newIndex });
   return response.data; // { lists: [...] }
 };
+
+export const updateCardApi = async (cardId, cardData) => {
+  const response = await api.patch(`/cards/${cardId}`, cardData);
+  return response.data; // { card: ... }
+};
+
+export const aiBreakdownCardApi = async (cardId) => {
+  const response = await api.post('/ai/breakdown', { cardId });
+  return response.data; // { card: ... }
+};

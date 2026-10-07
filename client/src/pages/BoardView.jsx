@@ -11,6 +11,7 @@ import { fetchBoardById, moveCardApi, moveListApi } from '../api/boards.js';
 import socket, { connectSocket } from '../lib/socket.js';
 import Sidebar from '../components/Sidebar.jsx';
 import Loader from '../components/Loader.jsx';
+import CardDetailModal from '../components/CardDetailModal.jsx';
 
 /* ─────────────────────────────────────────────────────────────────────────
    MemberAvatar  – initials circle for a user object
@@ -45,7 +46,7 @@ const MemberAvatar = ({ user, size = 'sm', title }) => {
 /* ─────────────────────────────────────────────────────────────────────────
    CardItem  – draggable card tile
 ───────────────────────────────────────────────────────────────────────── */
-const CardItem = ({ card, index }) => {
+const CardItem = ({ card, index, onCardClick, isDragInProgress }) => {
   const hasAssignees = card.assignees?.length > 0;
   const hasDueDate = !!card.dueDate;
   const checklistTotal = card.checklist?.length || 0;
@@ -61,8 +62,12 @@ const CardItem = ({ card, index }) => {
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`bg-white rounded-xl border border-brand-border px-3.5 py-3 shadow-sm hover:shadow-md hover:border-brand-primary/30 transition-all duration-150 cursor-grab active:cursor-grabbing group
-            ${snapshot.isDragging ? 'shadow-lg ring-2 ring-brand-primary/30 rotate-1' : ''}`}
+          onClick={() => {
+            if (isDragInProgress?.() || snapshot.isDragging) return;
+            onCardClick?.(card);
+          }}
+          className={`bg-white rounded-xl border border-brand-border px-3.5 py-3 shadow-sm hover:shadow-md hover:border-brand-primary/30 transition-all duration-150 cursor-pointer group
+            ${snapshot.isDragging ? 'shadow-lg ring-2 ring-brand-primary/30 rotate-1 !cursor-grabbing' : ''}`}
         >
           {/* Labels */}
           {card.labels?.length > 0 && (
@@ -112,7 +117,7 @@ const CardItem = ({ card, index }) => {
 /* ─────────────────────────────────────────────────────────────────────────
    ListColumn  – one draggable kanban column
 ───────────────────────────────────────────────────────────────────────── */
-const ListColumn = ({ list, cards, index }) => {
+const ListColumn = ({ list, cards, index, onCardClick, isDragInProgress }) => {
   return (
     <Draggable draggableId={list._id} index={index}>
       {(provided, snapshot) => (
@@ -148,7 +153,13 @@ const ListColumn = ({ list, cards, index }) => {
                   </div>
                 ) : (
                   cards.map((card, cardIndex) => (
-                    <CardItem key={card._id} card={card} index={cardIndex} />
+                    <CardItem
+                      key={card._id}
+                      card={card}
+                      index={cardIndex}
+                      onCardClick={onCardClick}
+                      isDragInProgress={isDragInProgress}
+                    />
                   ))
                 )}
                 {dropProvided.placeholder}
@@ -180,14 +191,17 @@ const BOARD_EVENTS = [
 const BoardView = () => {
   const { boardId } = useParams();
 
-  const [board, setBoard]     = useState(null);
-  const [lists, setLists]     = useState([]);
-  const [cards, setCards]     = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+  const [board, setBoard]           = useState(null);
+  const [lists, setLists]           = useState([]);
+  const [cards, setCards]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
+  const [selectedCardId, setSelectedCardId] = useState(null);
 
   // True while a drag gesture is in progress – guards against mid-drag refetches
   const isDraggingRef = useRef(false);
+  // Guard against click triggering modal immediately after a drag release
+  const dragJustEndedRef = useRef(false);
   // If a broadcast arrived during a drag, refetch once the drag finishes
   const pendingRefetchRef = useRef(false);
 
@@ -259,6 +273,25 @@ const BoardView = () => {
   const cardsForList = (listId) =>
     [...cards.filter((c) => c.list === listId)].sort((a, b) => a.position - b.position);
 
+  const isDragInProgress = useCallback(() => {
+    return isDraggingRef.current || dragJustEndedRef.current;
+  }, []);
+
+  const handleCardClick = useCallback((card) => {
+    if (isDragInProgress()) return;
+    setSelectedCardId(card._id);
+  }, [isDragInProgress]);
+
+  const handleCardUpdated = useCallback((updatedCard) => {
+    setCards((prevCards) =>
+      prevCards.map((c) => (c._id === updatedCard._id ? updatedCard : c))
+    );
+  }, []);
+
+  const activeCard = selectedCardId
+    ? cards.find((c) => c._id === selectedCardId)
+    : null;
+
   /* ── Drag-and-drop ── */
   const onDragStart = useCallback(() => {
     isDraggingRef.current = true;
@@ -267,6 +300,10 @@ const BoardView = () => {
   const onDragEnd = useCallback(
     async (result) => {
       isDraggingRef.current = false;
+      dragJustEndedRef.current = true;
+      setTimeout(() => {
+        dragJustEndedRef.current = false;
+      }, 200);
 
       // If a socket event came in while dragging, refetch now that it's safe
       if (pendingRefetchRef.current) {
@@ -435,6 +472,8 @@ const BoardView = () => {
                           list={list}
                           cards={cardsForList(list._id)}
                           index={index}
+                          onCardClick={handleCardClick}
+                          isDragInProgress={isDragInProgress}
                         />
                       ))}
                       {provided.placeholder}
@@ -452,6 +491,15 @@ const BoardView = () => {
           )}
         </div>
       </div>
+
+      {/* ── Card Detail Modal ── */}
+      {activeCard && (
+        <CardDetailModal
+          card={activeCard}
+          onClose={() => setSelectedCardId(null)}
+          onCardUpdated={handleCardUpdated}
+        />
+      )}
     </div>
   );
 };
