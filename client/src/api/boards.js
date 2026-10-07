@@ -34,3 +34,13 @@ export const removeBoardMember = async (boardId, userId) => {
   const response = await api.delete(`/boards/${boardId}/members/${userId}`);
   return response.data;
 };
+
+export const moveCardApi = async (cardId, toListId, newIndex) => {
+  const response = await api.patch(`/cards/${cardId}/move`, { toListId, newIndex });
+  return response.data; // { cards: [...] }
+};
+
+export const moveListApi = async (listId, newIndex) => {
+  const response = await api.patch(`/lists/${listId}/move`, { newIndex });
+  return response.data; // { lists: [...] }
+};

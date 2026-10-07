@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Users, AlertCircle, RefreshCw } from 'lucide-react';
-import { fetchBoardById } from '../api/boards.js';
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+} from '@hello-pangea/dnd';
+import toast from 'react-hot-toast';
+import { fetchBoardById, moveCardApi, moveListApi } from '../api/boards.js';
 import Sidebar from '../components/Sidebar.jsx';
 import Loader from '../components/Loader.jsx';
 
@@ -36,93 +42,121 @@ const MemberAvatar = ({ user, size = 'sm', title }) => {
 };
 
 /* ─────────────────────────────────────────────────────────────────────────
-   CardItem  – read-only card tile
+   CardItem  – draggable card tile
 ───────────────────────────────────────────────────────────────────────── */
-const CardItem = ({ card }) => {
+const CardItem = ({ card, index }) => {
   const hasAssignees = card.assignees?.length > 0;
   const hasDueDate = !!card.dueDate;
   const checklistTotal = card.checklist?.length || 0;
   const checklistDone = card.checklist?.filter((i) => i.done).length || 0;
 
-  const formatDue = (date) => {
-    return new Date(date).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-    });
-  };
+  const formatDue = (date) =>
+    new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 
   return (
-    <div className="bg-white rounded-xl border border-brand-border px-3.5 py-3 shadow-sm hover:shadow-md hover:border-brand-primary/30 transition-all duration-150 cursor-default group">
-      {/* Labels */}
-      {card.labels?.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {card.labels.map((label, i) => (
-            <span
-              key={i}
-              className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-primary-light text-brand-primary"
-            >
-              {label}
-            </span>
-          ))}
+    <Draggable draggableId={card._id} index={index}>
+      {(provided, snapshot) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.draggableProps}
+          {...provided.dragHandleProps}
+          className={`bg-white rounded-xl border border-brand-border px-3.5 py-3 shadow-sm hover:shadow-md hover:border-brand-primary/30 transition-all duration-150 cursor-grab active:cursor-grabbing group
+            ${snapshot.isDragging ? 'shadow-lg ring-2 ring-brand-primary/30 rotate-1' : ''}`}
+        >
+          {/* Labels */}
+          {card.labels?.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {card.labels.map((label, i) => (
+                <span
+                  key={i}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-primary-light text-brand-primary"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Title */}
+          <p className="text-sm font-medium text-brand-text leading-snug">{card.title}</p>
+
+          {/* Footer row */}
+          {(hasAssignees || hasDueDate || checklistTotal > 0) && (
+            <div className="mt-2.5 flex items-center justify-between gap-2">
+              {/* Assignee avatars */}
+              <div className="flex -space-x-1.5">
+                {card.assignees?.slice(0, 3).map((u) => (
+                  <MemberAvatar key={u._id} user={u} size="sm" />
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px] text-brand-text-muted">
+                {/* Checklist progress */}
+                {checklistTotal > 0 && (
+                  <span className="font-medium">
+                    {checklistDone}/{checklistTotal}
+                  </span>
+                )}
+                {/* Due date */}
+                {hasDueDate && <span>{formatDue(card.dueDate)}</span>}
+              </div>
+            </div>
+          )}
         </div>
       )}
-
-      {/* Title */}
-      <p className="text-sm font-medium text-brand-text leading-snug">{card.title}</p>
-
-      {/* Footer row */}
-      {(hasAssignees || hasDueDate || checklistTotal > 0) && (
-        <div className="mt-2.5 flex items-center justify-between gap-2">
-          {/* Assignee avatars */}
-          <div className="flex -space-x-1.5">
-            {card.assignees?.slice(0, 3).map((u) => (
-              <MemberAvatar key={u._id} user={u} size="sm" />
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 text-[11px] text-brand-text-muted">
-            {/* Checklist progress */}
-            {checklistTotal > 0 && (
-              <span className="font-medium">
-                {checklistDone}/{checklistTotal}
-              </span>
-            )}
-            {/* Due date */}
-            {hasDueDate && (
-              <span>{formatDue(card.dueDate)}</span>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    </Draggable>
   );
 };
 
 /* ─────────────────────────────────────────────────────────────────────────
-   ListColumn  – one kanban column
+   ListColumn  – one draggable kanban column
 ───────────────────────────────────────────────────────────────────────── */
-const ListColumn = ({ list, cards }) => {
+const ListColumn = ({ list, cards, index }) => {
   return (
-    <div className="w-72 shrink-0 flex flex-col bg-slate-100/80 rounded-2xl border border-brand-border overflow-hidden">
-      {/* Column header */}
-      <div className="px-4 py-3 flex items-center justify-between bg-white/70 border-b border-brand-border">
-        <h3 className="text-sm font-bold text-brand-text truncate pr-2">{list.title}</h3>
-        <span className="shrink-0 w-6 h-6 rounded-full bg-slate-200 text-brand-text-secondary text-[11px] font-bold flex items-center justify-center">
-          {cards.length}
-        </span>
-      </div>
-
-      {/* Cards */}
-      <div className="flex-1 p-3 space-y-2.5 overflow-y-auto max-h-[calc(100vh-14rem)]">
-        {cards.length === 0 ? (
-          <div className="py-6 text-center text-xs text-brand-text-muted border-2 border-dashed border-slate-200 rounded-xl">
-            No cards
+    <Draggable draggableId={list._id} index={index}>
+      {(provided, snapshot) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.draggableProps}
+          className={`w-72 shrink-0 flex flex-col bg-slate-100/80 rounded-2xl border border-brand-border overflow-hidden
+            ${snapshot.isDragging ? 'shadow-2xl ring-2 ring-brand-primary/20' : ''}`}
+        >
+          {/* Column header – drag handle for the whole list */}
+          <div
+            {...provided.dragHandleProps}
+            className="px-4 py-3 flex items-center justify-between bg-white/70 border-b border-brand-border cursor-grab active:cursor-grabbing"
+          >
+            <h3 className="text-sm font-bold text-brand-text truncate pr-2">{list.title}</h3>
+            <span className="shrink-0 w-6 h-6 rounded-full bg-slate-200 text-brand-text-secondary text-[11px] font-bold flex items-center justify-center">
+              {cards.length}
+            </span>
           </div>
-        ) : (
-          cards.map((card) => <CardItem key={card._id} card={card} />)
-        )}
-      </div>
-    </div>
+
+          {/* Droppable card area */}
+          <Droppable droppableId={list._id} type="CARD">
+            {(dropProvided, dropSnapshot) => (
+              <div
+                ref={dropProvided.innerRef}
+                {...dropProvided.droppableProps}
+                className={`flex-1 p-3 space-y-2.5 overflow-y-auto max-h-[calc(100vh-14rem)] transition-colors duration-150
+                  ${dropSnapshot.isDraggingOver ? 'bg-brand-primary/5' : ''}`}
+              >
+                {cards.length === 0 && !dropSnapshot.isDraggingOver ? (
+                  <div className="py-6 text-center text-xs text-brand-text-muted border-2 border-dashed border-slate-200 rounded-xl">
+                    No cards
+                  </div>
+                ) : (
+                  cards.map((card, cardIndex) => (
+                    <CardItem key={card._id} card={card} index={cardIndex} />
+                  ))
+                )}
+                {dropProvided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </div>
+      )}
+    </Draggable>
   );
 };
 
@@ -166,6 +200,87 @@ const BoardView = () => {
   // Get sorted cards for a given list id
   const cardsForList = (listId) =>
     [...cards.filter((c) => c.list === listId)].sort((a, b) => a.position - b.position);
+
+  /* ── Drag-and-drop handler ── */
+  const onDragEnd = useCallback(
+    async (result) => {
+      const { type, source, destination, draggableId } = result;
+
+      // Dropped outside any droppable or no movement
+      if (!destination) return;
+      if (
+        destination.droppableId === source.droppableId &&
+        destination.index === source.index
+      )
+        return;
+
+      /* ── LIST reorder ── */
+      if (type === 'LIST') {
+        const prevLists = lists;
+        const next = Array.from(lists);
+        const [moved] = next.splice(source.index, 1);
+        next.splice(destination.index, 0, moved);
+
+        // Optimistic update
+        setLists(next);
+
+        try {
+          await moveListApi(draggableId, destination.index);
+        } catch (err) {
+          // Rollback
+          setLists(prevLists);
+          toast.error(
+            err.response?.data?.message || 'Failed to reorder list. Changes reverted.'
+          );
+        }
+        return;
+      }
+
+      /* ── CARD reorder / move ── */
+      if (type === 'CARD') {
+        const fromListId = source.droppableId;
+        const toListId   = destination.droppableId;
+        const prevCards  = cards;
+
+        if (fromListId === toListId) {
+          // Reorder within same list
+          const listCards = cardsForList(fromListId);
+          const [movedCard] = listCards.splice(source.index, 1);
+          listCards.splice(destination.index, 0, movedCard);
+
+          // Rebuild cards state with updated positions for this list
+          const updatedPositions = listCards.map((c, i) => ({ ...c, position: i }));
+          const otherCards = cards.filter((c) => c.list !== fromListId);
+          setCards([...otherCards, ...updatedPositions]);
+        } else {
+          // Move between lists
+          const fromCards = cardsForList(fromListId);
+          const toCards   = cardsForList(toListId);
+          const [movedCard] = fromCards.splice(source.index, 1);
+          const updatedMovedCard = { ...movedCard, list: toListId };
+          toCards.splice(destination.index, 0, updatedMovedCard);
+
+          const updatedFrom = fromCards.map((c, i) => ({ ...c, position: i }));
+          const updatedTo   = toCards.map((c, i) => ({ ...c, position: i }));
+          const untouchedCards = cards.filter(
+            (c) => c.list !== fromListId && c.list !== toListId
+          );
+          setCards([...untouchedCards, ...updatedFrom, ...updatedTo]);
+        }
+
+        try {
+          await moveCardApi(draggableId, toListId, destination.index);
+        } catch (err) {
+          // Rollback
+          setCards(prevCards);
+          toast.error(
+            err.response?.data?.message || 'Failed to move card. Changes reverted.'
+          );
+        }
+      }
+    },
+    [lists, cards, cardsForList]
+  );
 
   return (
     <div className="flex h-screen overflow-hidden bg-brand-bg">
@@ -240,21 +355,33 @@ const BoardView = () => {
           {!loading && !error && (
             /* Horizontal scroll container */
             <div className="h-full overflow-x-auto overflow-y-hidden">
-              <div className="flex gap-4 p-6 h-full items-start min-w-max">
-                {lists.map((list) => (
-                  <ListColumn
-                    key={list._id}
-                    list={list}
-                    cards={cardsForList(list._id)}
-                  />
-                ))}
+              <DragDropContext onDragEnd={onDragEnd}>
+                <Droppable droppableId="board" type="LIST" direction="horizontal">
+                  {(provided) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className="flex gap-4 p-6 h-full items-start min-w-max"
+                    >
+                      {lists.map((list, index) => (
+                        <ListColumn
+                          key={list._id}
+                          list={list}
+                          cards={cardsForList(list._id)}
+                          index={index}
+                        />
+                      ))}
+                      {provided.placeholder}
 
-                {lists.length === 0 && (
-                  <div className="flex items-center justify-center w-72 h-48 rounded-2xl border-2 border-dashed border-brand-border text-sm text-brand-text-muted">
-                    No lists yet
-                  </div>
-                )}
-              </div>
+                      {lists.length === 0 && (
+                        <div className="flex items-center justify-center w-72 h-48 rounded-2xl border-2 border-dashed border-brand-border text-sm text-brand-text-muted">
+                          No lists yet
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
             </div>
           )}
         </div>
