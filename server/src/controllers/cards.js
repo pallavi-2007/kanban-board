@@ -71,7 +71,14 @@ export const updateCard = async (req, res, next) => {
     if (description !== undefined) card.description = description;
     if (dueDate !== undefined) card.dueDate = dueDate;
     if (labels !== undefined) card.labels = labels;
-    if (checklist !== undefined) card.checklist = checklist;
+    if (checklist !== undefined) {
+      card.checklist = checklist.map((item) => ({
+        text: item.text || item.title || '',
+        title: item.title || item.text || '',
+        done: !!item.done,
+        ...(item._id ? { _id: item._id } : {})
+      }));
+    }
 
     await card.save();
 

@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.js';
 import boardsRoutes from './routes/boards.js';
 import listsRoutes from './routes/lists.js';
 import cardsRoutes from './routes/cards.js';
+import aiRoutes from './routes/ai.js';
 import { errorHandler, AppError } from './middleware/errorHandler.js';
 
 const app = express();
@@ -26,6 +27,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/boards', boardsRoutes);
 app.use('/api/lists', listsRoutes);
 app.use('/api/cards', cardsRoutes);
+app.use('/api/ai', aiRoutes);
 
 // 404 Handler
 app.use('*', (req, res, next) => {

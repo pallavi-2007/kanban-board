@@ -16,7 +16,8 @@ const updateCardSchema = z.object({
   checklist: z.array(
     z.object({
       _id: z.string().optional(),
-      text: z.string().min(1, 'Checklist text cannot be empty'),
+      text: z.string().min(1, 'Checklist text cannot be empty').optional(),
+      title: z.string().min(1, 'Title cannot be empty').optional(),
       done: z.boolean().default(false)
     })
   ).optional()

@@ -4,8 +4,17 @@ const checklistItemSchema = new mongoose.Schema(
   {
     text: {
       type: String,
-      required: [true, 'Checklist item text is required'],
-      trim: true
+      trim: true,
+      default: function () {
+        return this.title || '';
+      }
+    },
+    title: {
+      type: String,
+      trim: true,
+      default: function () {
+        return this.text || '';
+      }
     },
     done: {
       type: Boolean,
