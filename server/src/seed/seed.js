@@ -9,10 +9,13 @@ import Card from '../models/Card.js';
 
 dotenv.config();
 
+// All demo emails including the old priya@demo.com so it gets cleaned up
 const DEMO_EMAILS = [
+  'admin@demo.com',
+  'lead@demo.com',
   'aarav@demo.com',
-  'priya@demo.com',
-  'rohan@demo.com'
+  'rohan@demo.com',
+  'priya@demo.com'   // old account – removed on re-run
 ];
 
 const BOARD_TITLE = 'Final Year Project: Smart Attendance System';
@@ -23,7 +26,7 @@ export const seedDatabase = async () => {
 
     console.log('Seeding demo data...');
 
-    // 1. Identify and remove ONLY existing demo users and their demo boards
+    // 1. Clean up all existing demo users and boards owned by them
     const existingDemoUsers = await User.find({ email: { $in: DEMO_EMAILS } });
     const demoUserIds = existingDemoUsers.map((u) => u._id);
 
@@ -35,7 +38,6 @@ export const seedDatabase = async () => {
     });
     const demoBoardIds = existingDemoBoards.map((b) => b._id);
 
-    // Delete associated demo cards and lists
     if (demoBoardIds.length > 0) {
       await Card.deleteMany({ board: { $in: demoBoardIds } });
       await List.deleteMany({ board: { $in: demoBoardIds } });
@@ -46,35 +48,45 @@ export const seedDatabase = async () => {
       await User.deleteMany({ _id: { $in: demoUserIds } });
     }
 
-    // 2. Create demo users
+    // 2. Create demo users with correct roles
     const passwordHash = await bcrypt.hash('Password123', 10);
+
+    const admin = await User.create({
+      name: 'Admin',
+      email: 'admin@demo.com',
+      passwordHash,
+      role: 'admin'
+    });
+
+    const priya = await User.create({
+      name: 'Priya Sharma',
+      email: 'lead@demo.com',
+      passwordHash,
+      role: 'lead'
+    });
 
     const aarav = await User.create({
       name: 'Aarav',
       email: 'aarav@demo.com',
-      passwordHash
-    });
-
-    const priya = await User.create({
-      name: 'Priya',
-      email: 'priya@demo.com',
-      passwordHash
+      passwordHash,
+      role: 'member'
     });
 
     const rohan = await User.create({
       name: 'Rohan',
       email: 'rohan@demo.com',
-      passwordHash
+      passwordHash,
+      role: 'member'
     });
 
-    // 3. Create demo board
+    // 3. Create demo board – lead@demo.com (Priya Sharma) is the owner
     const board = await Board.create({
       title: BOARD_TITLE,
       description: 'College project tracking board for the smart attendance system.',
-      owner: aarav._id,
+      owner: priya._id,
       members: [
-        { user: aarav._id, role: 'owner' },
-        { user: priya._id, role: 'member' },
+        { user: priya._id, role: 'owner' },
+        { user: aarav._id, role: 'member' },
         { user: rohan._id, role: 'member' }
       ]
     });
@@ -92,7 +104,7 @@ export const seedDatabase = async () => {
       listsMap[listNames[i]] = listDoc;
     }
 
-    // 5. Create cards
+    // 5. Create cards (assignees are members on the board)
     const cardsData = [
       {
         list: listsMap['Backlog']._id,
@@ -153,13 +165,17 @@ export const seedDatabase = async () => {
         description: cardItem.description,
         position: cardItem.position,
         assignees: cardItem.assignees,
-        createdBy: aarav._id,
+        createdBy: priya._id,
         checklist: []
       });
     }
 
     console.log('Seed completed successfully!');
-    console.log(`Demo Users: Aarav (aarav@demo.com), Priya (priya@demo.com), Rohan (rohan@demo.com)`);
+    console.log(`Demo Users:`);
+    console.log(`  admin@demo.com  (Admin, role: admin)     — Password123`);
+    console.log(`  lead@demo.com   (Priya Sharma, role: lead, board owner) — Password123`);
+    console.log(`  aarav@demo.com  (Aarav, role: member, on board)  — Password123`);
+    console.log(`  rohan@demo.com  (Rohan, role: member, on board)  — Password123`);
     console.log(`Board: "${board.title}" with ${listNames.length} lists and ${cardsData.length} cards.`);
   } catch (error) {
     console.error('Seed error:', error.message);
