@@ -6,6 +6,7 @@ import { connectDB } from './config/db.js';
 import { socketAuth } from './lib/socketAuth.js';
 import { setIo } from './lib/broadcaster.js';
 import Board from './models/Board.js';
+import User from './models/User.js';
 
 dotenv.config();
 
@@ -34,14 +35,17 @@ io.on('connection', (socket) => {
     try {
       if (!boardId) return;
 
-      // Verify the authenticated user is actually a member of this board
+      // Verify the authenticated user is actually an admin or a member of this board
       const board = await Board.findById(boardId).lean();
       if (!board) return;
+
+      const user = await User.findById(socket.user._id).lean();
+      const isAdmin = (user?.role || socket.user.role) === 'admin';
 
       const isMember = board.members.some(
         (m) => m.user.toString() === socket.user._id.toString()
       );
-      if (!isMember) {
+      if (!isAdmin && !isMember) {
         socket.emit('error', { message: 'Access denied: not a board member' });
         return;
       }

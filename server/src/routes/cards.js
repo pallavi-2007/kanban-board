@@ -3,7 +3,7 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import { updateCard, moveCardOrder, deleteCard } from '../controllers/cards.js';
 import { auth } from '../middleware/auth.js';
-import { boardAccess } from '../middleware/boardAccess.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { validate } from '../middleware/validate.js';
 
 const router = express.Router();
@@ -34,8 +34,8 @@ const moveCardSchema = z.object({
 
 router.use(auth);
 
-router.patch('/:cardId', boardAccess('member'), validate(updateCardSchema), updateCard);
-router.patch('/:cardId/move', boardAccess('member'), validate(moveCardSchema), moveCardOrder);
-router.delete('/:cardId', boardAccess('member'), deleteCard);
+router.patch('/:cardId', requirePermission('card:edit'), validate(updateCardSchema), updateCard);
+router.patch('/:cardId/move', requirePermission('card:move'), validate(moveCardSchema), moveCardOrder);
+router.delete('/:cardId', requirePermission('card:delete'), deleteCard);
 
 export default router;

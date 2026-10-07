@@ -43,3 +43,26 @@ export const broadcast = (req, event, payload) => {
     _io.to(room).emit(event, data);
   }
 };
+
+/**
+ * Remove any connected sockets for the given user from a board room.
+ */
+export const removeUserFromBoardRoom = (boardId, userId) => {
+  if (!_io || !boardId || !userId) return;
+  const room = `board:${boardId}`;
+  const userIdStr = userId.toString();
+
+  try {
+    if (_io.sockets?.sockets) {
+      for (const [_, socket] of _io.sockets.sockets) {
+        const socketUserId = socket.user?._id?.toString() || socket.user?.id?.toString();
+        if (socketUserId === userIdStr) {
+          socket.leave(room);
+          console.log(`Socket ${socket.id} (user ${userIdStr}) removed from ${room}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('removeUserFromBoardRoom error:', err.message);
+  }
+};

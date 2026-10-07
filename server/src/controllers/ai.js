@@ -4,32 +4,37 @@ import Card from '../models/Card.js';
 import Board from '../models/Board.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { broadcast } from '../lib/broadcaster.js';
+import { canRunAi, isBoardMember, isCardAssignee } from '../middleware/permissions.js';
 
 export const GEMINI_MODEL = 'gemini-3.1-flash-lite';
 const AI_TIMEOUT_MS = 90000;
 
 export const breakdownCard = async (req, res, next) => {
   try {
-    const { cardId } = req.body;
+    const cardId = req.card?._id || req.body.cardId;
 
     if (!cardId || !mongoose.Types.ObjectId.isValid(cardId)) {
       throw new AppError('A valid cardId is required', 400);
     }
 
-    const card = await Card.findById(cardId);
+    const card = req.card || (await Card.findById(cardId));
     if (!card) {
       throw new AppError('Card not found', 404);
     }
 
-    const board = await Board.findById(card.board);
+    const board = req.board || (await Board.findById(card.board));
     if (!board) {
       throw new AppError('Board not found', 404);
     }
 
-    const userIdStr = req.user._id.toString();
-    const isMember = board.members.some((m) => m.user.toString() === userIdStr);
-    if (!isMember) {
-      throw new AppError('Access denied: You are not a member of this board', 403);
+    if (!canRunAi(req.user, board, card)) {
+      if (!isBoardMember(req.user, board)) {
+        throw new AppError('Access denied: You are not a member of this board', 403);
+      }
+      if (req.user.role === 'member' && !isCardAssignee(req.user, card)) {
+        throw new AppError('Forbidden: Members can only use AI breakdown on cards assigned to them', 403);
+      }
+      throw new AppError('Forbidden: Access denied to AI breakdown for this card', 403);
     }
 
     let subtasks = [];

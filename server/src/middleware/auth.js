@@ -29,6 +29,10 @@ export const auth = async (req, res, next) => {
       throw new AppError('User not found', 401);
     }
 
+    if (!user.role) {
+      user.role = 'member';
+    }
+
     req.user = user;
     next();
   } catch (error) {

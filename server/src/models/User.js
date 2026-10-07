@@ -18,6 +18,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Password hash is required'],
       select: false
+    },
+    role: {
+      type: String,
+      enum: ['admin', 'lead', 'member'],
+      default: 'member'
     }
   },
   {
@@ -26,6 +31,7 @@ const userSchema = new mongoose.Schema(
       transform: (doc, ret) => {
         delete ret.passwordHash;
         delete ret.__v;
+        if (!ret.role) ret.role = 'member';
         return ret;
       }
     }

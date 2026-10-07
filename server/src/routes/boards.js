@@ -11,7 +11,7 @@ import {
 } from '../controllers/boards.js';
 import { createList } from '../controllers/lists.js';
 import { auth } from '../middleware/auth.js';
-import { boardAccess } from '../middleware/boardAccess.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { validate } from '../middleware/validate.js';
 
 const router = express.Router();
@@ -37,14 +37,14 @@ const createListSchema = z.object({
 router.use(auth);
 
 router.get('/', getBoards);
-router.post('/', validate(createBoardSchema), createBoard);
-router.get('/:boardId', boardAccess('member'), getBoardById);
-router.patch('/:boardId', boardAccess('owner'), validate(updateBoardSchema), updateBoard);
-router.delete('/:boardId', boardAccess('owner'), deleteBoard);
-router.post('/:boardId/members', boardAccess('owner'), validate(addMemberSchema), addMember);
-router.delete('/:boardId/members/:userId', boardAccess('owner'), removeMember);
+router.post('/', requirePermission('board:create'), validate(createBoardSchema), createBoard);
+router.get('/:boardId', requirePermission('board:view'), getBoardById);
+router.patch('/:boardId', requirePermission('board:manage'), validate(updateBoardSchema), updateBoard);
+router.delete('/:boardId', requirePermission('board:manage'), deleteBoard);
+router.post('/:boardId/members', requirePermission('board:manage'), validate(addMemberSchema), addMember);
+router.delete('/:boardId/members/:userId', requirePermission('board:manage'), removeMember);
 
 // List creation on board
-router.post('/:boardId/lists', boardAccess('member'), validate(createListSchema), createList);
+router.post('/:boardId/lists', requirePermission('list:manage'), validate(createListSchema), createList);
 
 export default router;

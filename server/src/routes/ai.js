@@ -1,6 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { auth } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { breakdownCard } from '../controllers/ai.js';
 
 const router = express.Router();
@@ -14,6 +15,6 @@ const aiRateLimiter = rateLimit({
 });
 
 router.use(auth);
-router.post('/breakdown', aiRateLimiter, breakdownCard);
+router.post('/breakdown', aiRateLimiter, requirePermission('ai:breakdown'), breakdownCard);
 
 export default router;

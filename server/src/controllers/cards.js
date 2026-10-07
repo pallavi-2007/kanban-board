@@ -81,12 +81,24 @@ export const updateCard = async (req, res, next) => {
     if (dueDate !== undefined) card.dueDate = dueDate;
     if (labels !== undefined) card.labels = labels;
     if (checklist !== undefined) {
-      card.checklist = checklist.map((item) => ({
-        text: item.text || item.title || '',
-        title: item.title || item.text || '',
-        done: !!item.done,
-        ...(item._id ? { _id: item._id } : {})
-      }));
+      if (req.user.role === 'member') {
+        card.checklist = card.checklist.map((existingItem, idx) => {
+          const match = checklist.find(
+            (c) => (c._id && c._id.toString() === existingItem._id.toString())
+          ) || checklist[idx];
+          if (match && typeof match.done === 'boolean') {
+            existingItem.done = match.done;
+          }
+          return existingItem;
+        });
+      } else {
+        card.checklist = checklist.map((item) => ({
+          text: item.text || item.title || '',
+          title: item.title || item.text || '',
+          done: !!item.done,
+          ...(item._id ? { _id: item._id } : {})
+        }));
+      }
     }
 
     await card.save();

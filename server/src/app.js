@@ -9,6 +9,7 @@ import boardsRoutes from './routes/boards.js';
 import listsRoutes from './routes/lists.js';
 import cardsRoutes from './routes/cards.js';
 import aiRoutes from './routes/ai.js';
+import usersRoutes from './routes/users.js';
 import { errorHandler, AppError } from './middleware/errorHandler.js';
 
 dotenv.config();
@@ -55,6 +56,7 @@ app.use('/api/boards', boardsRoutes);
 app.use('/api/lists', listsRoutes);
 app.use('/api/cards', cardsRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/users', usersRoutes);
 
 // 404 Handler
 app.use('*', (req, res, next) => {

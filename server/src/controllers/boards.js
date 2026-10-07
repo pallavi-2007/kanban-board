@@ -4,11 +4,15 @@ import List from '../models/List.js';
 import Card from '../models/Card.js';
 import User from '../models/User.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { removeUserFromBoardRoom } from '../lib/broadcaster.js';
 
 export const getBoards = async (req, res, next) => {
   try {
-    const boards = await Board.find({ 'members.user': req.user._id })
-      .populate('members.user', 'name email')
+    const userRole = req.user.role || 'member';
+    const filter = userRole === 'admin' ? {} : { 'members.user': req.user._id };
+
+    const boards = await Board.find(filter)
+      .populate('members.user', 'name email role')
       .sort({ updatedAt: -1 });
 
     res.status(200).json({ boards });
@@ -185,9 +189,12 @@ export const removeMember = async (req, res, next) => {
       { $pull: { assignees: userId } }
     );
 
+    // Disconnect user's socket from board room
+    removeUserFromBoardRoom(board._id, userId);
+
     const updatedBoard = await Board.findById(board._id).populate(
       'members.user',
-      'name email'
+      'name email role'
     );
 
     res.status(200).json({
