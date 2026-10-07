@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Users, AlertCircle, RefreshCw } from 'lucide-react';
 import {
@@ -8,6 +8,7 @@ import {
 } from '@hello-pangea/dnd';
 import toast from 'react-hot-toast';
 import { fetchBoardById, moveCardApi, moveListApi } from '../api/boards.js';
+import socket, { connectSocket } from '../lib/socket.js';
 import Sidebar from '../components/Sidebar.jsx';
 import Loader from '../components/Loader.jsx';
 
@@ -163,15 +164,34 @@ const ListColumn = ({ list, cards, index }) => {
 /* ─────────────────────────────────────────────────────────────────────────
    BoardView  – main page
 ───────────────────────────────────────────────────────────────────────── */
+
+// All events the server can broadcast into a board room
+const BOARD_EVENTS = [
+  'card:created',
+  'card:updated',
+  'card:deleted',
+  'card:moved',
+  'list:created',
+  'list:updated',
+  'list:deleted',
+  'list:moved',
+];
+
 const BoardView = () => {
   const { boardId } = useParams();
 
-  const [board, setBoard]   = useState(null);
-  const [lists, setLists]   = useState([]);
-  const [cards, setCards]   = useState([]);
+  const [board, setBoard]     = useState(null);
+  const [lists, setLists]     = useState([]);
+  const [cards, setCards]     = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
+  const [error, setError]     = useState(null);
 
+  // True while a drag gesture is in progress – guards against mid-drag refetches
+  const isDraggingRef = useRef(false);
+  // If a broadcast arrived during a drag, refetch once the drag finishes
+  const pendingRefetchRef = useRef(false);
+
+  /* ── Data loading ── */
   const loadBoard = useCallback(async () => {
     if (!boardId) return;
     try {
@@ -179,7 +199,6 @@ const BoardView = () => {
       setError(null);
       const data = await fetchBoardById(boardId);
       setBoard(data.board);
-      // Sort lists and cards by position ascending
       setLists([...(data.lists || [])].sort((a, b) => a.position - b.position));
       setCards(data.cards || []);
     } catch (err) {
@@ -197,13 +216,65 @@ const BoardView = () => {
     loadBoard();
   }, [loadBoard]);
 
-  // Get sorted cards for a given list id
+  /* ── Socket.io setup ── */
+  useEffect(() => {
+    if (!boardId) return;
+
+    // Ensure connected (no-op if already connected)
+    connectSocket();
+
+    const joinRoom = () => {
+      socket.emit('board:join', boardId);
+    };
+
+    // Join immediately if already connected, or once the connection is up
+    if (socket.connected) {
+      joinRoom();
+    } else {
+      socket.once('connect', joinRoom);
+    }
+
+    // Re-join after any reconnect
+    socket.on('connect', joinRoom);
+
+    // Handler: schedule a refetch, but guard against mid-drag interruptions
+    const handleBoardEvent = () => {
+      if (isDraggingRef.current) {
+        pendingRefetchRef.current = true;
+      } else {
+        loadBoard();
+      }
+    };
+
+    BOARD_EVENTS.forEach((evt) => socket.on(evt, handleBoardEvent));
+
+    return () => {
+      socket.emit('board:leave', boardId);
+      socket.off('connect', joinRoom);
+      BOARD_EVENTS.forEach((evt) => socket.off(evt, handleBoardEvent));
+    };
+  }, [boardId, loadBoard]);
+
+  /* ── Helpers ── */
   const cardsForList = (listId) =>
     [...cards.filter((c) => c.list === listId)].sort((a, b) => a.position - b.position);
 
-  /* ── Drag-and-drop handler ── */
+  /* ── Drag-and-drop ── */
+  const onDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+  }, []);
+
   const onDragEnd = useCallback(
     async (result) => {
+      isDraggingRef.current = false;
+
+      // If a socket event came in while dragging, refetch now that it's safe
+      if (pendingRefetchRef.current) {
+        pendingRefetchRef.current = false;
+        loadBoard();
+        return; // State will be refreshed from server; skip optimistic apply
+      }
+
       const { type, source, destination, draggableId } = result;
 
       // Dropped outside any droppable or no movement
@@ -227,7 +298,6 @@ const BoardView = () => {
         try {
           await moveListApi(draggableId, destination.index);
         } catch (err) {
-          // Rollback
           setLists(prevLists);
           toast.error(
             err.response?.data?.message || 'Failed to reorder list. Changes reverted.'
@@ -243,17 +313,14 @@ const BoardView = () => {
         const prevCards  = cards;
 
         if (fromListId === toListId) {
-          // Reorder within same list
           const listCards = cardsForList(fromListId);
           const [movedCard] = listCards.splice(source.index, 1);
           listCards.splice(destination.index, 0, movedCard);
 
-          // Rebuild cards state with updated positions for this list
           const updatedPositions = listCards.map((c, i) => ({ ...c, position: i }));
           const otherCards = cards.filter((c) => c.list !== fromListId);
           setCards([...otherCards, ...updatedPositions]);
         } else {
-          // Move between lists
           const fromCards = cardsForList(fromListId);
           const toCards   = cardsForList(toListId);
           const [movedCard] = fromCards.splice(source.index, 1);
@@ -271,7 +338,6 @@ const BoardView = () => {
         try {
           await moveCardApi(draggableId, toListId, destination.index);
         } catch (err) {
-          // Rollback
           setCards(prevCards);
           toast.error(
             err.response?.data?.message || 'Failed to move card. Changes reverted.'
@@ -279,7 +345,7 @@ const BoardView = () => {
         }
       }
     },
-    [lists, cards, cardsForList]
+    [lists, cards, cardsForList, loadBoard]
   );
 
   return (
@@ -355,7 +421,7 @@ const BoardView = () => {
           {!loading && !error && (
             /* Horizontal scroll container */
             <div className="h-full overflow-x-auto overflow-y-hidden">
-              <DragDropContext onDragEnd={onDragEnd}>
+              <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
                 <Droppable droppableId="board" type="LIST" direction="horizontal">
                   {(provided) => (
                     <div

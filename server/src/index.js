@@ -3,6 +3,9 @@ import dotenv from 'dotenv';
 import { Server } from 'socket.io';
 import app from './app.js';
 import { connectDB } from './config/db.js';
+import { socketAuth } from './lib/socketAuth.js';
+import { setIo } from './lib/broadcaster.js';
+import Board from './models/Board.js';
 
 dotenv.config();
 
@@ -17,9 +20,49 @@ const io = new Server(server, {
   }
 });
 
-io.on('connection', (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
+// Share io with controllers via the broadcaster module
+setIo(io);
 
+// Authenticate every socket connection with JWT
+io.use(socketAuth);
+
+io.on('connection', (socket) => {
+  console.log(`Socket connected: ${socket.id} (user: ${socket.user._id})`);
+
+  /* ── board:join ─────────────────────────────────────────────────────── */
+  socket.on('board:join', async (boardId) => {
+    try {
+      if (!boardId) return;
+
+      // Verify the authenticated user is actually a member of this board
+      const board = await Board.findById(boardId).lean();
+      if (!board) return;
+
+      const isMember = board.members.some(
+        (m) => m.user.toString() === socket.user._id.toString()
+      );
+      if (!isMember) {
+        socket.emit('error', { message: 'Access denied: not a board member' });
+        return;
+      }
+
+      const room = `board:${boardId}`;
+      socket.join(room);
+      console.log(`Socket ${socket.id} joined ${room}`);
+    } catch (err) {
+      console.error('board:join error:', err.message);
+    }
+  });
+
+  /* ── board:leave ────────────────────────────────────────────────────── */
+  socket.on('board:leave', (boardId) => {
+    if (!boardId) return;
+    const room = `board:${boardId}`;
+    socket.leave(room);
+    console.log(`Socket ${socket.id} left ${room}`);
+  });
+
+  /* ── disconnect ─────────────────────────────────────────────────────── */
   socket.on('disconnect', () => {
     console.log(`Socket disconnected: ${socket.id}`);
   });

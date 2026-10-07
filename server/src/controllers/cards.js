@@ -2,6 +2,7 @@ import Card from '../models/Card.js';
 import List from '../models/List.js';
 import { moveCard, reorderCardsAfterDelete } from '../services/ordering.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { broadcast } from '../lib/broadcaster.js';
 
 /**
  * Helper to validate that all assignees are members of the board.
@@ -48,6 +49,8 @@ export const createCard = async (req, res, next) => {
     );
 
     res.status(201).json({ card: populatedCard });
+
+    broadcast(req, 'card:created', { cardId: card._id.toString(), listId });
   } catch (error) {
     next(error);
   }
@@ -78,6 +81,8 @@ export const updateCard = async (req, res, next) => {
     );
 
     res.status(200).json({ card: updated });
+
+    broadcast(req, 'card:updated', { cardId: card._id.toString() });
   } catch (error) {
     next(error);
   }
@@ -91,6 +96,8 @@ export const moveCardOrder = async (req, res, next) => {
     const updatedCards = await moveCard(cardId, toListId, newIndex);
 
     res.status(200).json({ cards: updatedCards });
+
+    broadcast(req, 'card:moved', { cardId, toListId, newIndex });
   } catch (error) {
     next(error);
   }
@@ -109,6 +116,8 @@ export const deleteCard = async (req, res, next) => {
       cardId,
       listId
     });
+
+    broadcast(req, 'card:deleted', { cardId: cardId.toString(), listId: listId.toString() });
   } catch (error) {
     next(error);
   }

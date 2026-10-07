@@ -1,6 +1,7 @@
 import List from '../models/List.js';
 import Card from '../models/Card.js';
 import { moveList, reorderListsAfterDelete } from '../services/ordering.js';
+import { broadcast } from '../lib/broadcaster.js';
 
 export const createList = async (req, res, next) => {
   try {
@@ -16,6 +17,8 @@ export const createList = async (req, res, next) => {
     });
 
     res.status(201).json({ list });
+
+    broadcast(req, 'list:created', { listId: list._id.toString() });
   } catch (error) {
     next(error);
   }
@@ -30,6 +33,8 @@ export const updateList = async (req, res, next) => {
     await list.save();
 
     res.status(200).json({ list });
+
+    broadcast(req, 'list:updated', { listId: list._id.toString() });
   } catch (error) {
     next(error);
   }
@@ -43,6 +48,8 @@ export const moveListOrder = async (req, res, next) => {
     const reorderedLists = await moveList(listId, newIndex);
 
     res.status(200).json({ lists: reorderedLists });
+
+    broadcast(req, 'list:moved', { listId, newIndex });
   } catch (error) {
     next(error);
   }
@@ -67,6 +74,8 @@ export const deleteList = async (req, res, next) => {
       listId,
       lists: remainingLists
     });
+
+    broadcast(req, 'list:deleted', { listId: listId.toString() });
   } catch (error) {
     next(error);
   }
