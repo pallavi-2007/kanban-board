@@ -5,7 +5,7 @@ import Board from '../models/Board.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { broadcast } from '../lib/broadcaster.js';
 
-export const GEMINI_MODEL = 'gemini-3.8-flash';
+export const GEMINI_MODEL = 'gemini-3.1-flash-lite';
 const AI_TIMEOUT_MS = 90000;
 
 export const breakdownCard = async (req, res, next) => {
@@ -63,9 +63,6 @@ Provide 4 to 8 short subtasks (max 8 words each) as a JSON array of strings. No 
           contents: prompt,
           config: {
             maxOutputTokens: 2000,
-            thinkingConfig: {
-              thinkingBudget: 0
-            },
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.ARRAY,
@@ -101,7 +98,23 @@ Provide 4 to 8 short subtasks (max 8 words each) as a JSON array of strings. No 
     } catch (geminiError) {
       clearTimeout(timeoutId);
       console.error('Gemini breakdown error:', geminiError.message);
-      const isTimeout = geminiError.message?.toLowerCase().includes('timed out');
+
+      const status = geminiError.status || geminiError.statusCode || geminiError.response?.status;
+      const errMsg = geminiError.message || '';
+
+      if (status === 429 || errMsg.includes('429') || /quota|resource_exhausted|rate limit/i.test(errMsg)) {
+        return res.status(429).json({
+          message: 'AI rate limit exceeded. Please try again shortly.'
+        });
+      }
+
+      if (status === 404 || errMsg.includes('404') || /not found/i.test(errMsg)) {
+        return res.status(404).json({
+          message: 'AI model or resource not found.'
+        });
+      }
+
+      const isTimeout = errMsg.toLowerCase().includes('timed out');
       return res.status(502).json({
         message: isTimeout
           ? 'AI request timed out after 90 seconds'
@@ -131,6 +144,12 @@ Provide 4 to 8 short subtasks (max 8 words each) as a JSON array of strings. No 
 
     res.status(200).json({ card: populatedCard });
   } catch (error) {
+    if (error.statusCode === 404 || error.status === 404) {
+      return res.status(404).json({ message: error.message || 'Not found' });
+    }
+    if (error.statusCode === 429 || error.status === 429) {
+      return res.status(429).json({ message: error.message || 'Too many requests' });
+    }
     next(error);
   }
 };
