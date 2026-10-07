@@ -1,13 +1,30 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Users, AlertCircle, RefreshCw } from 'lucide-react';
+import {
+  ArrowLeft,
+  Users,
+  AlertCircle,
+  RefreshCw,
+  Plus,
+  Trash2,
+  X,
+  Pencil
+} from 'lucide-react';
 import {
   DragDropContext,
   Droppable,
   Draggable,
 } from '@hello-pangea/dnd';
 import toast from 'react-hot-toast';
-import { fetchBoardById, moveCardApi, moveListApi } from '../api/boards.js';
+import {
+  fetchBoardById,
+  moveCardApi,
+  moveListApi,
+  createListApi,
+  updateListApi,
+  deleteListApi,
+  createCardApi
+} from '../api/boards.js';
 import socket, { connectSocket } from '../lib/socket.js';
 import Sidebar from '../components/Sidebar.jsx';
 import Loader from '../components/Loader.jsx';
@@ -84,7 +101,7 @@ const CardItem = ({ card, index, onCardClick, isDragInProgress }) => {
           )}
 
           {/* Title */}
-          <p className="text-sm font-medium text-brand-text leading-snug">{card.title}</p>
+          <p className="text-sm font-medium text-brand-text leading-snug break-words">{card.title}</p>
 
           {/* Footer row */}
           {(hasAssignees || hasDueDate || checklistTotal > 0) && (
@@ -117,7 +134,81 @@ const CardItem = ({ card, index, onCardClick, isDragInProgress }) => {
 /* ─────────────────────────────────────────────────────────────────────────
    ListColumn  – one draggable kanban column
 ───────────────────────────────────────────────────────────────────────── */
-const ListColumn = ({ list, cards, index, onCardClick, isDragInProgress }) => {
+const ListColumn = ({
+  list,
+  cards,
+  index,
+  onCardClick,
+  isDragInProgress,
+  onUpdateListTitle,
+  onDeleteList,
+  onCreateCard
+}) => {
+  // Rename list state
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState(list.title);
+
+  // Delete list confirm state
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Add card inline state
+  const [isAddingCard, setIsAddingCard] = useState(false);
+  const [newCardTitle, setNewCardTitle] = useState('');
+  const [isSubmittingCard, setIsSubmittingCard] = useState(false);
+
+  useEffect(() => {
+    setTitleInput(list.title);
+  }, [list.title]);
+
+  const handleSaveTitle = async (e) => {
+    e?.preventDefault();
+    const trimmed = titleInput.trim();
+    if (!trimmed) {
+      toast.error('List title cannot be empty');
+      setTitleInput(list.title);
+      setIsEditingTitle(false);
+      return;
+    }
+    if (trimmed === list.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    try {
+      await onUpdateListTitle(list._id, trimmed);
+      setIsEditingTitle(false);
+    } catch {
+      setTitleInput(list.title);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      await onDeleteList(list._id);
+    } catch {
+      setIsConfirmingDelete(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleAddCardSubmit = async (e) => {
+    e?.preventDefault();
+    const trimmed = newCardTitle.trim();
+    if (!trimmed) return;
+
+    try {
+      setIsSubmittingCard(true);
+      await onCreateCard(list._id, trimmed);
+      setNewCardTitle('');
+      setIsAddingCard(false);
+    } finally {
+      setIsSubmittingCard(false);
+    }
+  };
+
   return (
     <Draggable draggableId={list._id} index={index}>
       {(provided, snapshot) => (
@@ -130,12 +221,84 @@ const ListColumn = ({ list, cards, index, onCardClick, isDragInProgress }) => {
           {/* Column header – drag handle for the whole list */}
           <div
             {...provided.dragHandleProps}
-            className="px-4 py-3 flex items-center justify-between bg-white/70 border-b border-brand-border cursor-grab active:cursor-grabbing"
+            className="px-4 py-3 bg-white/70 border-b border-brand-border cursor-grab active:cursor-grabbing"
           >
-            <h3 className="text-sm font-bold text-brand-text truncate pr-2">{list.title}</h3>
-            <span className="shrink-0 w-6 h-6 rounded-full bg-slate-200 text-brand-text-secondary text-[11px] font-bold flex items-center justify-center">
-              {cards.length}
-            </span>
+            {isConfirmingDelete ? (
+              <div
+                className="flex items-center justify-between gap-2"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <span className="text-xs font-semibold text-red-600 truncate">Delete list?</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-[11px] font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {isDeleting ? '...' : 'Delete'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDelete(false)}
+                    disabled={isDeleting}
+                    className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-brand-text text-[11px] font-semibold rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : isEditingTitle ? (
+              <form
+                onSubmit={handleSaveTitle}
+                className="flex items-center gap-1.5"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="text"
+                  value={titleInput}
+                  onChange={(e) => setTitleInput(e.target.value)}
+                  onBlur={handleSaveTitle}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setIsEditingTitle(false);
+                      setTitleInput(list.title);
+                    }
+                  }}
+                  autoFocus
+                  className="flex-1 px-2 py-0.5 text-sm font-bold text-brand-text bg-white border border-brand-primary rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                />
+              </form>
+            ) : (
+              <div className="flex items-center justify-between group/header">
+                <div
+                  className="flex items-center gap-1.5 min-w-0 flex-1 mr-2 cursor-pointer"
+                  onClick={() => setIsEditingTitle(true)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  title="Click to rename list"
+                >
+                  <h3 className="text-sm font-bold text-brand-text truncate hover:text-brand-primary transition-colors">
+                    {list.title}
+                  </h3>
+                  <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover/header:opacity-100 transition-opacity shrink-0" />
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="w-6 h-6 rounded-full bg-slate-200 text-brand-text-secondary text-[11px] font-bold flex items-center justify-center">
+                    {cards.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDelete(true)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors opacity-0 group-hover/header:opacity-100"
+                    title="Delete list"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Droppable card area */}
@@ -144,7 +307,7 @@ const ListColumn = ({ list, cards, index, onCardClick, isDragInProgress }) => {
               <div
                 ref={dropProvided.innerRef}
                 {...dropProvided.droppableProps}
-                className={`flex-1 p-3 space-y-2.5 overflow-y-auto max-h-[calc(100vh-14rem)] transition-colors duration-150
+                className={`flex-1 p-3 space-y-2.5 overflow-y-auto max-h-[calc(100vh-17rem)] transition-colors duration-150
                   ${dropSnapshot.isDraggingOver ? 'bg-brand-primary/5' : ''}`}
               >
                 {cards.length === 0 && !dropSnapshot.isDraggingOver ? (
@@ -166,6 +329,60 @@ const ListColumn = ({ list, cards, index, onCardClick, isDragInProgress }) => {
               </div>
             )}
           </Droppable>
+
+          {/* Add card at bottom of list */}
+          <div className="p-2 pt-0">
+            {isAddingCard ? (
+              <form onSubmit={handleAddCardSubmit} className="space-y-2 bg-white p-2.5 rounded-xl border border-brand-border shadow-sm">
+                <textarea
+                  value={newCardTitle}
+                  onChange={(e) => setNewCardTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAddCardSubmit();
+                    } else if (e.key === 'Escape') {
+                      setIsAddingCard(false);
+                      setNewCardTitle('');
+                    }
+                  }}
+                  autoFocus
+                  placeholder="Enter a title for this card..."
+                  rows={2}
+                  className="w-full text-xs text-brand-text p-2 bg-slate-50 rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-primary focus:bg-white resize-none"
+                />
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingCard || !newCardTitle.trim()}
+                    className="px-3 py-1.5 bg-brand-primary hover:bg-brand-primary-hover text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {isSubmittingCard ? 'Adding...' : 'Add Card'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCard(false);
+                      setNewCardTitle('');
+                    }}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-brand-text hover:bg-slate-100 transition-colors"
+                    title="Cancel (Esc)"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAddingCard(true)}
+                className="w-full py-2 px-3 flex items-center gap-1.5 text-xs font-semibold text-brand-text-secondary hover:text-brand-text hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add a card</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
     </Draggable>
@@ -191,12 +408,17 @@ const BOARD_EVENTS = [
 const BoardView = () => {
   const { boardId } = useParams();
 
-  const [board, setBoard]           = useState(null);
-  const [lists, setLists]           = useState([]);
-  const [cards, setCards]           = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState(null);
+  const [board, setBoard]                   = useState(null);
+  const [lists, setLists]                   = useState([]);
+  const [cards, setCards]                   = useState([]);
+  const [loading, setLoading]               = useState(true);
+  const [error, setError]                   = useState(null);
   const [selectedCardId, setSelectedCardId] = useState(null);
+
+  // Add list inline state
+  const [isAddingList, setIsAddingList]     = useState(false);
+  const [newListTitle, setNewListTitle]     = useState('');
+  const [isSubmittingList, setIsSubmittingList] = useState(false);
 
   // True while a drag gesture is in progress – guards against mid-drag refetches
   const isDraggingRef = useRef(false);
@@ -288,9 +510,76 @@ const BoardView = () => {
     );
   }, []);
 
+  const handleCardDeleted = useCallback((cardId) => {
+    setCards((prevCards) => prevCards.filter((c) => c._id !== cardId));
+    setSelectedCardId(null);
+  }, []);
+
   const activeCard = selectedCardId
     ? cards.find((c) => c._id === selectedCardId)
     : null;
+
+  /* ── CRUD Actions ── */
+  const handleCreateList = async (e) => {
+    e?.preventDefault();
+    const trimmed = newListTitle.trim();
+    if (!trimmed) return;
+
+    try {
+      setIsSubmittingList(true);
+      const data = await createListApi(boardId, trimmed);
+      if (data?.list) {
+        setLists((prev) => [...prev, data.list]);
+      }
+      setNewListTitle('');
+      setIsAddingList(false);
+      toast.success('List created');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create list');
+    } finally {
+      setIsSubmittingList(false);
+    }
+  };
+
+  const handleUpdateListTitle = async (listId, newTitle) => {
+    try {
+      const data = await updateListApi(listId, newTitle);
+      if (data?.list) {
+        setLists((prev) =>
+          prev.map((l) => (l._id === listId ? { ...l, title: data.list.title } : l))
+        );
+      }
+      toast.success('List renamed');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to rename list');
+      throw err;
+    }
+  };
+
+  const handleDeleteList = async (listId) => {
+    try {
+      await deleteListApi(listId);
+      setLists((prev) => prev.filter((l) => l._id !== listId));
+      setCards((prev) => prev.filter((c) => c.list !== listId));
+      toast.success('List deleted');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete list');
+      throw err;
+    }
+  };
+
+  const handleCreateCard = async (listId, title) => {
+    try {
+      const data = await createCardApi(listId, { title });
+      if (data?.card) {
+        setCards((prev) => [...prev, data.card]);
+      }
+      toast.success('Card created');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create card');
+      throw err;
+    }
+  };
 
   /* ── Drag-and-drop ── */
   const onDragStart = useCallback(() => {
@@ -474,15 +763,66 @@ const BoardView = () => {
                           index={index}
                           onCardClick={handleCardClick}
                           isDragInProgress={isDragInProgress}
+                          onUpdateListTitle={handleUpdateListTitle}
+                          onDeleteList={handleDeleteList}
+                          onCreateCard={handleCreateCard}
                         />
                       ))}
                       {provided.placeholder}
 
-                      {lists.length === 0 && (
-                        <div className="flex items-center justify-center w-72 h-48 rounded-2xl border-2 border-dashed border-brand-border text-sm text-brand-text-muted">
-                          No lists yet
-                        </div>
-                      )}
+                      {/* ── Add List Column at End ── */}
+                      <div className="w-72 shrink-0">
+                        {isAddingList ? (
+                          <form
+                            onSubmit={handleCreateList}
+                            className="bg-slate-100/90 rounded-2xl border border-brand-border p-3 space-y-2.5 shadow-sm"
+                          >
+                            <input
+                              type="text"
+                              value={newListTitle}
+                              onChange={(e) => setNewListTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                  setIsAddingList(false);
+                                  setNewListTitle('');
+                                }
+                              }}
+                              autoFocus
+                              placeholder="Enter list title..."
+                              className="w-full px-3 py-2 text-sm font-medium text-brand-text bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
+                            />
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="submit"
+                                disabled={isSubmittingList || !newListTitle.trim()}
+                                className="px-3.5 py-1.5 bg-brand-primary hover:bg-brand-primary-hover text-white text-xs font-semibold rounded-xl transition-colors disabled:opacity-50"
+                              >
+                                {isSubmittingList ? 'Adding...' : 'Add List'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsAddingList(false);
+                                  setNewListTitle('');
+                                }}
+                                className="p-1.5 rounded-xl text-slate-400 hover:text-brand-text hover:bg-slate-200/60 transition-colors"
+                                title="Cancel (Esc)"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingList(true)}
+                            className="w-full p-3 rounded-2xl border-2 border-dashed border-slate-200 hover:border-brand-primary/40 bg-white/40 hover:bg-white text-xs font-semibold text-brand-text-secondary hover:text-brand-primary transition-all flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Add another list</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </Droppable>
@@ -498,6 +838,7 @@ const BoardView = () => {
           card={activeCard}
           onClose={() => setSelectedCardId(null)}
           onCardUpdated={handleCardUpdated}
+          onCardDeleted={handleCardDeleted}
         />
       )}
     </div>

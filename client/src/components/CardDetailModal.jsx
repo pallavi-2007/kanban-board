@@ -1,7 +1,18 @@
-import React, { useState } from 'react';
-import { X, Sparkles, CheckSquare, Square, AlignLeft, Users, Calendar, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  Sparkles,
+  CheckSquare,
+  Square,
+  AlignLeft,
+  Users,
+  Calendar,
+  Loader2,
+  Trash2,
+  Pencil
+} from 'lucide-react';
 import toast from 'react-hot-toast';
-import { updateCardApi, aiBreakdownCardApi } from '../api/boards.js';
+import { updateCardApi, aiBreakdownCardApi, deleteCardApi } from '../api/boards.js';
 
 const MemberAvatar = ({ user, size = 'sm', title }) => {
   const initials = user?.name ? user.name.slice(0, 2).toUpperCase() : '??';
@@ -29,9 +40,31 @@ const MemberAvatar = ({ user, size = 'sm', title }) => {
   );
 };
 
-const CardDetailModal = ({ card, onClose, onCardUpdated }) => {
+const CardDetailModal = ({ card, onClose, onCardUpdated, onCardDeleted }) => {
   const [aiLoading, setAiLoading] = useState(false);
   const [updatingChecklist, setUpdatingChecklist] = useState(false);
+
+  // Edit title state
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState(card?.title || '');
+  const [savingTitle, setSavingTitle] = useState(false);
+
+  // Edit description state
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
+  const [descInput, setDescInput] = useState(card?.description || '');
+  const [savingDesc, setSavingDesc] = useState(false);
+
+  // Delete card confirm state
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [deletingCard, setDeletingCard] = useState(false);
+
+  // Keep inputs updated when card changes from outside (e.g. socket events)
+  useEffect(() => {
+    if (card) {
+      if (!isEditingTitle) setTitleInput(card.title || '');
+      if (!isEditingDesc) setDescInput(card.description || '');
+    }
+  }, [card, isEditingTitle, isEditingDesc]);
 
   if (!card) return null;
 
@@ -47,6 +80,70 @@ const CardDetailModal = ({ card, onClose, onCardUpdated }) => {
       year: 'numeric'
     });
 
+  const handleSaveTitle = async (e) => {
+    e?.preventDefault();
+    const trimmed = titleInput.trim();
+    if (!trimmed) {
+      toast.error('Card title cannot be empty');
+      return;
+    }
+    if (trimmed === card.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    try {
+      setSavingTitle(true);
+      const data = await updateCardApi(card._id, { title: trimmed });
+      if (data?.card) {
+        onCardUpdated(data.card);
+      }
+      setIsEditingTitle(false);
+      toast.success('Card title updated');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update title');
+    } finally {
+      setSavingTitle(false);
+    }
+  };
+
+  const handleSaveDesc = async () => {
+    const trimmed = descInput.trim();
+    if (trimmed === (card.description || '')) {
+      setIsEditingDesc(false);
+      return;
+    }
+
+    try {
+      setSavingDesc(true);
+      const data = await updateCardApi(card._id, { description: trimmed });
+      if (data?.card) {
+        onCardUpdated(data.card);
+      }
+      setIsEditingDesc(false);
+      toast.success('Description updated');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update description');
+    } finally {
+      setSavingDesc(false);
+    }
+  };
+
+  const handleDeleteCard = async () => {
+    try {
+      setDeletingCard(true);
+      await deleteCardApi(card._id);
+      toast.success('Card deleted');
+      onCardDeleted?.(card._id);
+      onClose();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete card');
+      setIsConfirmingDelete(false);
+    } finally {
+      setDeletingCard(false);
+    }
+  };
+
   const handleToggleChecklistItem = async (index) => {
     if (updatingChecklist) return;
 
@@ -61,7 +158,7 @@ const CardDetailModal = ({ card, onClose, onCardUpdated }) => {
       return item;
     });
 
-    // Optimistically notify parent
+    // Optimistically update
     onCardUpdated({
       ...card,
       checklist: updatedChecklist
@@ -133,9 +230,60 @@ const CardDetailModal = ({ card, onClose, onCardUpdated }) => {
                 ))}
               </div>
             )}
-            <h2 className="text-lg font-bold text-brand-text leading-snug break-words">
-              {card.title}
-            </h2>
+
+            {/* Editable Title */}
+            {isEditingTitle ? (
+              <form onSubmit={handleSaveTitle} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={titleInput}
+                  onChange={(e) => setTitleInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setIsEditingTitle(false);
+                      setTitleInput(card.title);
+                    }
+                  }}
+                  autoFocus
+                  disabled={savingTitle}
+                  className="flex-1 px-2.5 py-1 text-base font-bold text-brand-text border border-brand-primary rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                />
+                <button
+                  type="submit"
+                  disabled={savingTitle}
+                  className="px-3 py-1 bg-brand-primary text-white text-xs font-semibold rounded-xl hover:bg-brand-primary-hover disabled:opacity-50"
+                >
+                  {savingTitle ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingTitle(false);
+                    setTitleInput(card.title);
+                  }}
+                  className="px-2.5 py-1 bg-slate-200 text-brand-text text-xs font-semibold rounded-xl hover:bg-slate-300"
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <div className="flex items-center gap-2 group/title">
+                <h2
+                  onClick={() => setIsEditingTitle(true)}
+                  className="text-lg font-bold text-brand-text leading-snug break-words cursor-pointer hover:bg-slate-200/50 px-1 -mx-1 rounded-lg transition-colors"
+                  title="Click to edit title"
+                >
+                  {card.title}
+                </h2>
+                <button
+                  onClick={() => setIsEditingTitle(true)}
+                  className="opacity-0 group-hover/title:opacity-100 p-1 text-brand-text-muted hover:text-brand-text transition-opacity"
+                  title="Edit title"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           <button
@@ -184,18 +332,68 @@ const CardDetailModal = ({ card, onClose, onCardUpdated }) => {
             </div>
           </div>
 
-          {/* Description Section */}
+          {/* Description Section (Editable) */}
           <div>
-            <h3 className="text-xs font-semibold text-brand-text-secondary uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <AlignLeft className="w-3.5 h-3.5 text-brand-text-muted" /> Description
-            </h3>
-            <div className="p-3.5 bg-slate-50/80 rounded-xl border border-brand-border text-sm text-brand-text leading-relaxed whitespace-pre-wrap">
-              {card.description?.trim() ? (
-                card.description
-              ) : (
-                <span className="text-brand-text-muted italic">No description provided.</span>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold text-brand-text-secondary uppercase tracking-wider flex items-center gap-1.5">
+                <AlignLeft className="w-3.5 h-3.5 text-brand-text-muted" /> Description
+              </h3>
+              {!isEditingDesc && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingDesc(true)}
+                  className="text-xs text-brand-primary hover:text-brand-primary-hover font-semibold flex items-center gap-1"
+                >
+                  <Pencil className="w-3 h-3" /> Edit
+                </button>
               )}
             </div>
+
+            {isEditingDesc ? (
+              <div className="space-y-2">
+                <textarea
+                  value={descInput}
+                  onChange={(e) => setDescInput(e.target.value)}
+                  rows={4}
+                  autoFocus
+                  disabled={savingDesc}
+                  placeholder="Add a more detailed description..."
+                  className="w-full p-3 bg-white rounded-xl border border-brand-primary text-sm text-brand-text leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-primary/20 resize-y"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveDesc}
+                    disabled={savingDesc}
+                    className="px-3.5 py-1.5 bg-brand-primary text-white text-xs font-semibold rounded-xl hover:bg-brand-primary-hover transition-colors disabled:opacity-50"
+                  >
+                    {savingDesc ? 'Saving...' : 'Save Description'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingDesc(false);
+                      setDescInput(card.description || '');
+                    }}
+                    className="px-3.5 py-1.5 bg-slate-200 text-brand-text text-xs font-semibold rounded-xl hover:bg-slate-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => setIsEditingDesc(true)}
+                className="p-3.5 bg-slate-50/80 hover:bg-slate-100/60 transition-colors rounded-xl border border-brand-border text-sm text-brand-text leading-relaxed whitespace-pre-wrap cursor-pointer"
+                title="Click to edit description"
+              >
+                {card.description?.trim() ? (
+                  card.description
+                ) : (
+                  <span className="text-brand-text-muted italic">Click to add a description...</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Checklist / Subtasks Section */}
@@ -288,8 +486,41 @@ const CardDetailModal = ({ card, onClose, onCardUpdated }) => {
           </div>
         </div>
 
-        {/* Modal Footer */}
-        <div className="px-6 py-3 border-t border-brand-border bg-slate-50 flex justify-end">
+        {/* Modal Footer with Delete & Close */}
+        <div className="px-6 py-3 border-t border-brand-border bg-slate-50 flex items-center justify-between gap-3">
+          <div>
+            {isConfirmingDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-red-600 font-semibold">Delete card?</span>
+                <button
+                  type="button"
+                  onClick={handleDeleteCard}
+                  disabled={deletingCard}
+                  className="px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors"
+                >
+                  {deletingCard ? 'Deleting...' : 'Yes, Delete'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingDelete(false)}
+                  disabled={deletingCard}
+                  className="px-3 py-1.5 rounded-xl bg-slate-200 text-brand-text text-xs font-semibold hover:bg-slate-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDelete(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-red-600 hover:bg-red-50 text-xs font-semibold border border-red-200 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Card</span>
+              </button>
+            )}
+          </div>
+
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-white border border-brand-border text-xs font-semibold text-brand-text hover:bg-slate-100 transition-colors cursor-pointer"

@@ -50,6 +50,31 @@ export const updateCardApi = async (cardId, cardData) => {
   return response.data; // { card: ... }
 };
 
+export const deleteCardApi = async (cardId) => {
+  const response = await api.delete(`/cards/${cardId}`);
+  return response.data;
+};
+
+export const createCardApi = async (listId, cardData) => {
+  const response = await api.post(`/lists/${listId}/cards`, cardData);
+  return response.data; // { card: ... }
+};
+
+export const createListApi = async (boardId, title) => {
+  const response = await api.post(`/boards/${boardId}/lists`, { title });
+  return response.data; // { list: ... }
+};
+
+export const updateListApi = async (listId, title) => {
+  const response = await api.patch(`/lists/${listId}`, { title });
+  return response.data; // { list: ... }
+};
+
+export const deleteListApi = async (listId) => {
+  const response = await api.delete(`/lists/${listId}`);
+  return response.data;
+};
+
 export const aiBreakdownCardApi = async (cardId) => {
   const response = await api.post('/ai/breakdown', { cardId });
   return response.data; // { card: ... }
