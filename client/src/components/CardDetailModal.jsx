@@ -9,7 +9,8 @@ import {
   Calendar,
   Loader2,
   Trash2,
-  Pencil
+  Pencil,
+  Check
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { updateCardApi, aiBreakdownCardApi, deleteCardApi } from '../api/boards.js';
@@ -40,9 +41,16 @@ const MemberAvatar = ({ user, size = 'sm', title }) => {
   );
 };
 
-const CardDetailModal = ({ card, onClose, onCardUpdated, onCardDeleted }) => {
+const CardDetailModal = ({
+  card,
+  boardMembers = [],
+  onClose,
+  onCardUpdated,
+  onCardDeleted
+}) => {
   const [aiLoading, setAiLoading] = useState(false);
   const [updatingChecklist, setUpdatingChecklist] = useState(false);
+  const [updatingAssignees, setUpdatingAssignees] = useState(false);
 
   // Edit title state
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -141,6 +149,50 @@ const CardDetailModal = ({ card, onClose, onCardUpdated, onCardDeleted }) => {
       setIsConfirmingDelete(false);
     } finally {
       setDeletingCard(false);
+    }
+  };
+
+  const handleToggleAssignee = async (memberUserId) => {
+    if (updatingAssignees) return;
+
+    const currentAssigneeIds = (card.assignees || []).map((u) =>
+      typeof u === 'string' ? u : u._id
+    );
+    const isAssigned = currentAssigneeIds.includes(memberUserId);
+
+    const newAssigneeIds = isAssigned
+      ? currentAssigneeIds.filter((id) => id !== memberUserId)
+      : [...currentAssigneeIds, memberUserId];
+
+    const previousAssignees = card.assignees;
+    const newPopulatedAssignees = newAssigneeIds.map((id) => {
+      const existing = card.assignees?.find(
+        (u) => (typeof u === 'string' ? u : u._id) === id
+      );
+      if (existing) return existing;
+      const memberObj = boardMembers.find((m) => m.user._id === id);
+      return memberObj?.user || { _id: id, name: 'User' };
+    });
+
+    onCardUpdated({
+      ...card,
+      assignees: newPopulatedAssignees
+    });
+
+    try {
+      setUpdatingAssignees(true);
+      const data = await updateCardApi(card._id, { assignees: newAssigneeIds });
+      if (data?.card) {
+        onCardUpdated(data.card);
+      }
+    } catch (err) {
+      onCardUpdated({
+        ...card,
+        assignees: previousAssignees
+      });
+      toast.error(err.response?.data?.message || 'Failed to update assignees');
+    } finally {
+      setUpdatingAssignees(false);
     }
   };
 
@@ -297,37 +349,57 @@ const CardDetailModal = ({ card, onClose, onCardUpdated, onCardDeleted }) => {
 
         {/* Modal Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Metadata Row: Due Date & Assignees */}
-          <div className="flex flex-wrap gap-6 items-start text-sm">
-            {card.dueDate && (
-              <div>
-                <span className="text-xs font-semibold text-brand-text-secondary uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-brand-text-muted" /> Due Date
-                </span>
-                <span className="text-brand-text font-medium px-2.5 py-1 rounded-lg bg-slate-100 border border-brand-border text-xs">
-                  {formatDue(card.dueDate)}
-                </span>
-              </div>
-            )}
-
+          {/* Metadata Row: Due Date */}
+          {card.dueDate && (
             <div>
               <span className="text-xs font-semibold text-brand-text-secondary uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-brand-text-muted" /> Due Date
+              </span>
+              <span className="text-brand-text font-medium px-2.5 py-1 rounded-lg bg-slate-100 border border-brand-border text-xs">
+                {formatDue(card.dueDate)}
+              </span>
+            </div>
+          )}
+
+          {/* Assignees Section – with interactive member toggles */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-brand-text-secondary uppercase tracking-wider block flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-brand-text-muted" /> Assignees
               </span>
-              {card.assignees?.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  {card.assignees.map((user) => (
-                    <div
-                      key={user._id}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 border border-brand-border text-xs text-brand-text font-medium"
+              <span className="text-[11px] text-brand-text-muted">
+                Click member to assign / unassign
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {boardMembers.length > 0 ? (
+                boardMembers.map((member) => {
+                  const u = member.user;
+                  const isAssigned = (card.assignees || []).some(
+                    (a) => (typeof a === 'string' ? a : a._id) === u._id
+                  );
+                  return (
+                    <button
+                      key={u._id}
+                      type="button"
+                      onClick={() => handleToggleAssignee(u._id)}
+                      disabled={updatingAssignees}
+                      className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                        isAssigned
+                          ? 'bg-brand-primary-light border-brand-primary/40 text-brand-primary shadow-xs'
+                          : 'bg-white border-brand-border text-brand-text-secondary hover:bg-slate-50 hover:text-brand-text'
+                      }`}
+                      title={isAssigned ? `Unassign ${u.name}` : `Assign ${u.name}`}
                     >
-                      <MemberAvatar user={user} size="sm" />
-                      <span>{user.name}</span>
-                    </div>
-                  ))}
-                </div>
+                      <MemberAvatar user={u} size="sm" />
+                      <span>{u.name}</span>
+                      {isAssigned && <Check className="w-3.5 h-3.5 text-brand-primary shrink-0" />}
+                    </button>
+                  );
+                })
               ) : (
-                <span className="text-xs text-brand-text-muted italic">No assignees</span>
+                <span className="text-xs text-brand-text-muted italic">No board members found</span>
               )}
             </div>
           </div>

@@ -29,6 +29,7 @@ import socket, { connectSocket } from '../lib/socket.js';
 import Sidebar from '../components/Sidebar.jsx';
 import Loader from '../components/Loader.jsx';
 import CardDetailModal from '../components/CardDetailModal.jsx';
+import MembersModal from '../components/MembersModal.jsx';
 
 /* ─────────────────────────────────────────────────────────────────────────
    MemberAvatar  – initials circle for a user object
@@ -414,6 +415,7 @@ const BoardView = () => {
   const [loading, setLoading]               = useState(true);
   const [error, setError]                   = useState(null);
   const [selectedCardId, setSelectedCardId] = useState(null);
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
 
   // Add list inline state
   const [isAddingList, setIsAddingList]     = useState(false);
@@ -702,15 +704,24 @@ const BoardView = () => {
           {board && (
             <div className="flex items-center gap-3 shrink-0 ml-4">
               {/* Member avatars */}
-              <div className="flex -space-x-2">
+              <div
+                className="flex -space-x-2 cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => setIsMembersModalOpen(true)}
+                title="View board members"
+              >
                 {board.members?.slice(0, 4).map((m) => (
                   <MemberAvatar key={m.user._id} user={m.user} size="md" title={`${m.user.name} (${m.role})`} />
                 ))}
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-brand-text-secondary bg-slate-50 border border-brand-border px-2.5 py-1.5 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setIsMembersModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs text-brand-text-secondary bg-slate-50 border border-brand-border px-2.5 py-1.5 rounded-lg hover:bg-slate-100 hover:text-brand-text hover:border-brand-primary/30 transition-all cursor-pointer"
+                title="Manage board members"
+              >
                 <Users className="w-3.5 h-3.5 text-brand-primary" />
                 <span>{board.members?.length || 1} members</span>
-              </div>
+              </button>
             </div>
           )}
         </header>
@@ -836,11 +847,20 @@ const BoardView = () => {
       {activeCard && (
         <CardDetailModal
           card={activeCard}
+          boardMembers={board?.members || []}
           onClose={() => setSelectedCardId(null)}
           onCardUpdated={handleCardUpdated}
           onCardDeleted={handleCardDeleted}
         />
       )}
+
+      {/* ── Board Members Modal ── */}
+      <MembersModal
+        board={board}
+        isOpen={isMembersModalOpen}
+        onClose={() => setIsMembersModalOpen(false)}
+        onBoardUpdated={(updatedBoard) => setBoard(updatedBoard)}
+      />
     </div>
   );
 };
