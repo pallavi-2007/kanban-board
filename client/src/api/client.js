@@ -33,11 +33,14 @@ api.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       // Don't auto-logout if the 401 was from an intentional login attempt failure
-      const isLoginRequest = error.config.url.endsWith('/auth/login');
+      const isLoginRequest = error.config?.url?.endsWith('/auth/login');
       if (!isLoginRequest) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.dispatchEvent(new Event('auth:unauthorized'));
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);

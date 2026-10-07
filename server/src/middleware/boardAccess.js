@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Board from '../models/Board.js';
 import List from '../models/List.js';
 import Card from '../models/Card.js';
@@ -8,6 +9,9 @@ export const boardAccess = (requiredRole = 'member') => async (req, res, next) =
     let boardId = req.params.boardId;
 
     if (!boardId && req.params.listId) {
+      if (!mongoose.isValidObjectId(req.params.listId)) {
+        throw new AppError('Invalid listId', 400);
+      }
       const list = await List.findById(req.params.listId);
       if (!list) {
         throw new AppError('List not found', 404);
@@ -15,6 +19,9 @@ export const boardAccess = (requiredRole = 'member') => async (req, res, next) =
       req.list = list;
       boardId = list.board;
     } else if (!boardId && req.params.cardId) {
+      if (!mongoose.isValidObjectId(req.params.cardId)) {
+        throw new AppError('Invalid cardId', 400);
+      }
       const card = await Card.findById(req.params.cardId);
       if (!card) {
         throw new AppError('Card not found', 404);
@@ -25,6 +32,10 @@ export const boardAccess = (requiredRole = 'member') => async (req, res, next) =
 
     if (!boardId) {
       throw new AppError('Board ID is required', 400);
+    }
+
+    if (!mongoose.isValidObjectId(boardId)) {
+      throw new AppError('Invalid boardId', 400);
     }
 
     const board = await Board.findById(boardId);

@@ -8,7 +8,8 @@ import {
   Plus,
   Trash2,
   X,
-  Pencil
+  Pencil,
+  Menu
 } from 'lucide-react';
 import {
   DragDropContext,
@@ -416,6 +417,7 @@ const BoardView = () => {
   const [error, setError]                   = useState(null);
   const [selectedCardId, setSelectedCardId] = useState(null);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Add list inline state
   const [isAddingList, setIsAddingList]     = useState(false);
@@ -678,12 +680,20 @@ const BoardView = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-brand-bg">
-      <Sidebar />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* ── Top Header ── */}
-        <header className="h-16 px-6 bg-white border-b border-brand-border flex items-center justify-between shrink-0 z-10">
-          <div className="flex items-center gap-3 min-w-0">
+        <header className="h-16 px-4 md:px-6 bg-white border-b border-brand-border flex items-center justify-between shrink-0 z-10">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="md:hidden p-1.5 rounded-lg text-slate-500 hover:text-brand-text hover:bg-slate-100 transition-colors shrink-0"
+              title="Open sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <Link
               to="/boards"
               className="p-1.5 rounded-lg text-slate-400 hover:text-brand-text hover:bg-slate-100 transition-colors shrink-0"
@@ -757,14 +767,14 @@ const BoardView = () => {
 
           {!loading && !error && (
             /* Horizontal scroll container */
-            <div className="h-full overflow-x-auto overflow-y-hidden">
+            <div className="h-full overflow-x-auto overflow-y-hidden touch-pan-x overscroll-x-contain">
               <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
                 <Droppable droppableId="board" type="LIST" direction="horizontal">
                   {(provided) => (
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className="flex gap-4 p-6 h-full items-start min-w-max"
+                      className="flex gap-4 p-4 md:p-6 h-full items-start min-w-max"
                     >
                       {lists.map((list, index) => (
                         <ListColumn

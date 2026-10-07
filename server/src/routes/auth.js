@@ -27,10 +27,8 @@ const loginSchema = z.object({
   password: z.string({ required_error: 'Password is required' }).min(1, 'Password is required')
 });
 
-router.use(authLimiter);
-
-router.post('/register', validate(registerSchema), register);
-router.post('/login', validate(loginSchema), login);
+router.post('/register', authLimiter, validate(registerSchema), register);
+router.post('/login', authLimiter, validate(loginSchema), login);
 router.get('/me', auth, getMe);
 
 export default router;

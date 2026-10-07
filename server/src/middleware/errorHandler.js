@@ -18,9 +18,9 @@ export const errorHandler = (err, req, res, next) => {
     statusCode = 409;
     const field = Object.keys(err.keyValue || {})[0] || 'Field';
     message = `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`;
-  } else if (err.name === 'CastError') {
+  } else if (err.name === 'CastError' || err.name === 'BSONError') {
     statusCode = 400;
-    message = `Invalid ID format for ${err.path}`;
+    message = `Invalid ID format for ${err.path || 'id'}`;
   } else if (err.name === 'JsonWebTokenError') {
     statusCode = 401;
     message = 'Invalid authentication token';
@@ -32,6 +32,11 @@ export const errorHandler = (err, req, res, next) => {
   // Fallback if status code was still 200 somehow
   if (res.statusCode && res.statusCode !== 200 && statusCode === 500) {
     statusCode = res.statusCode;
+  }
+
+  // Ensure unhandled 500 errors return a clean short message, never a stack trace
+  if (statusCode === 500 && !(err instanceof AppError)) {
+    message = 'Internal server error';
   }
 
   res.status(statusCode).json({ message });

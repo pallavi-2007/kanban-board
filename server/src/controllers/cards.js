@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Card from '../models/Card.js';
 import List from '../models/List.js';
 import { moveCard, reorderCardsAfterDelete } from '../services/ordering.js';
@@ -12,6 +13,9 @@ const validateAssigneesAreMembers = (assignees, board) => {
 
   const memberUserIds = new Set(board.members.map((m) => m.user.toString()));
   for (const assigneeId of assignees) {
+    if (!mongoose.isValidObjectId(assigneeId)) {
+      throw new AppError('Invalid assignee ID format', 400);
+    }
     if (!memberUserIds.has(assigneeId.toString())) {
       throw new AppError('All assignees must be members of the board', 400);
     }
@@ -23,6 +27,11 @@ export const createCard = async (req, res, next) => {
     const { title, description, dueDate, labels, assignees } = req.body;
     const listId = req.params.listId;
     const board = req.board;
+
+    const list = await List.findById(listId);
+    if (!list) {
+      throw new AppError('List not found', 404);
+    }
 
     if (assignees && assignees.length > 0) {
       validateAssigneesAreMembers(assignees, board);

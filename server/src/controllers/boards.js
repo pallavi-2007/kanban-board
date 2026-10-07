@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Board from '../models/Board.js';
 import List from '../models/List.js';
 import Card from '../models/Card.js';
@@ -49,6 +50,9 @@ export const getBoardById = async (req, res, next) => {
       'members.user',
       'name email'
     );
+    if (!board) {
+      throw new AppError('Board not found', 404);
+    }
 
     const lists = await List.find({ board: board._id }).sort({ position: 1 });
     const cards = await Card.find({ board: board._id })
@@ -151,6 +155,15 @@ export const removeMember = async (req, res, next) => {
   try {
     const { userId } = req.params;
     const board = req.board;
+
+    if (!mongoose.isValidObjectId(userId)) {
+      throw new AppError('Invalid userId', 400);
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
 
     if (board.owner.toString() === userId.toString()) {
       throw new AppError('Cannot remove the board owner', 400);

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import List from '../models/List.js';
 import Card from '../models/Card.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -6,6 +7,10 @@ import { AppError } from '../middleware/errorHandler.js';
  * Move a list to a new index within its board and renumber positions 0..n-1.
  */
 export const moveList = async (listId, newIndex) => {
+  if (!mongoose.isValidObjectId(listId)) {
+    throw new AppError('Invalid listId', 400);
+  }
+
   const list = await List.findById(listId);
   if (!list) {
     throw new AppError('List not found', 404);
@@ -40,6 +45,13 @@ export const moveList = async (listId, newIndex) => {
  * Move a card within its list or to another list and renumber positions 0..n-1.
  */
 export const moveCard = async (cardId, toListId, newIndex) => {
+  if (!mongoose.isValidObjectId(cardId)) {
+    throw new AppError('Invalid cardId', 400);
+  }
+  if (!mongoose.isValidObjectId(toListId)) {
+    throw new AppError('Invalid toListId', 400);
+  }
+
   const card = await Card.findById(cardId);
   if (!card) {
     throw new AppError('Card not found', 404);

@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
+import mongoose from 'mongoose';
 import authRoutes from './routes/auth.js';
 import boardsRoutes from './routes/boards.js';
 import listsRoutes from './routes/lists.js';
@@ -8,14 +11,38 @@ import cardsRoutes from './routes/cards.js';
 import aiRoutes from './routes/ai.js';
 import { errorHandler, AppError } from './middleware/errorHandler.js';
 
+dotenv.config();
+
 const app = express();
 
 app.use(helmet());
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please try again later' }
+});
+
+app.use(generalLimiter);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: process.env.CLIENT_URL,
   credentials: true
 }));
+
 app.use(express.json());
+
+// Param validation for ObjectId parameters (boardId, listId, cardId, userId)
+['boardId', 'listId', 'cardId', 'userId'].forEach((paramName) => {
+  app.param(paramName, (req, res, next, val) => {
+    if (!mongoose.isValidObjectId(val)) {
+      return next(new AppError(`Invalid ${paramName}`, 400));
+    }
+    next();
+  });
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

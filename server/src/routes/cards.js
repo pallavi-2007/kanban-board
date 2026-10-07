@@ -1,5 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import { updateCard, moveCardOrder, deleteCard } from '../controllers/cards.js';
 import { auth } from '../middleware/auth.js';
 import { boardAccess } from '../middleware/boardAccess.js';
@@ -24,7 +25,10 @@ const updateCardSchema = z.object({
 });
 
 const moveCardSchema = z.object({
-  toListId: z.string({ required_error: 'toListId is required' }).min(1, 'toListId is required'),
+  toListId: z.string({ required_error: 'toListId is required' }).refine(
+    (val) => mongoose.isValidObjectId(val),
+    { message: 'Invalid toListId format' }
+  ),
   newIndex: z.number({ required_error: 'newIndex is required' }).int().min(0)
 });
 

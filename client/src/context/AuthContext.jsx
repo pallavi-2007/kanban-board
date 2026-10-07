@@ -38,6 +38,9 @@ export const AuthProvider = ({ children }) => {
 
     const handleUnauthorized = () => {
       logout();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);

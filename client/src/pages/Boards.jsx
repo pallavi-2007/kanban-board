@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, LayoutGrid, X } from 'lucide-react';
+import { Plus, LayoutGrid, X, Menu } from 'lucide-react';
 import { fetchBoards, createBoard } from '../api/boards.js';
 import Sidebar from '../components/Sidebar.jsx';
 import BoardCard from '../components/BoardCard.jsx';
@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 const Boards = () => {
   const [boards, setBoards] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -60,13 +61,23 @@ const Boards = () => {
   return (
     <div className="flex min-h-screen bg-brand-bg">
       {/* Sidebar */}
-      <Sidebar />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <header className="h-16 px-8 bg-white border-b border-brand-border flex items-center justify-between shrink-0">
-          <h1 className="text-xl font-bold text-brand-text tracking-tight">My Boards</h1>
+        <header className="h-16 px-4 md:px-8 bg-white border-b border-brand-border flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="md:hidden p-2 -ml-2 rounded-xl text-slate-500 hover:text-brand-text hover:bg-slate-100 transition-colors"
+              title="Open sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <h1 className="text-xl font-bold text-brand-text tracking-tight">My Boards</h1>
+          </div>
           <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-primary hover:bg-brand-primary-hover text-white text-sm font-semibold shadow-sm shadow-indigo-500/20 transition-all duration-200"
@@ -77,7 +88,7 @@ const Boards = () => {
         </header>
 
         {/* Dashboard Body */}
-        <div className="flex-1 p-8 overflow-y-auto">
+        <div className="flex-1 p-4 md:p-8 overflow-y-auto">
           {loading ? (
             <Loader fullScreen={false} message="Loading your boards..." />
           ) : (
@@ -97,7 +108,7 @@ const Boards = () => {
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-primary-hover text-white text-sm font-semibold shadow-sm shadow-indigo-500/20 transition-all duration-200"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>Create Your First Board</span>
+                    <span>Create board</span>
                   </button>
                 </div>
               ) : (
