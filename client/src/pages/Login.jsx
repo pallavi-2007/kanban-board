@@ -76,11 +76,19 @@ const Login = () => {
         </div>
 
         {/* Demo Seed Shortcut Reminder */}
-        <div className="p-4 rounded-xl bg-brand-navy-light/70 border border-brand-navy-border relative z-10">
-          <p className="text-xs text-slate-400 font-medium">
-            Demo account: <span className="text-indigo-300 font-mono">priya@demo.com</span> /{' '}
-            <span className="text-indigo-300 font-mono">Password123</span>
-          </p>
+        <div className="p-4 rounded-xl bg-brand-navy-light/70 border border-brand-navy-border relative z-10 space-y-1">
+          <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-1.5">Demo accounts — Password123</p>
+          {[
+            { email: 'admin@demo.com', label: 'Admin' },
+            { email: 'lead@demo.com',  label: 'Lead'  },
+            { email: 'aarav@demo.com', label: 'Member' },
+            { email: 'rohan@demo.com', label: 'Member' },
+          ].map(({ email, label }) => (
+            <div key={email} className="flex items-center justify-between gap-2">
+              <span className="text-indigo-300 font-mono text-xs">{email}</span>
+              <span className="text-[10px] text-slate-500">{label}</span>
+            </div>
+          ))}
         </div>
       </div>
 

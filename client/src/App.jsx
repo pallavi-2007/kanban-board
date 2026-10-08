@@ -7,12 +7,22 @@ import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Boards from './pages/Boards.jsx';
 import BoardView from './pages/BoardView.jsx';
+import Members from './pages/Members.jsx';
 
 // Redirect authenticated users away from /login and /register
 const PublicOnlyRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (user) return <Navigate to="/boards" replace />;
+  return children;
+};
+
+// Admin / Lead only; Members → /boards
+const AdminLeadRoute = ({ children }) => {
+  const { user, loading, isAdmin, isLead } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!isAdmin && !isLead) return <Navigate to="/boards" replace />;
   return children;
 };
 
@@ -49,6 +59,14 @@ function AppRoutes() {
           <ProtectedRoute>
             <BoardView />
           </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/members"
+        element={
+          <AdminLeadRoute>
+            <Members />
+          </AdminLeadRoute>
         }
       />
       <Route path="/" element={<Navigate to="/boards" replace />} />

@@ -65,8 +65,13 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
+  // Role helpers
+  const isAdmin  = user?.role === 'admin';
+  const isLead   = user?.role === 'lead';
+  const isMember = !isAdmin && !isLead; // includes logged-out, but only called when user != null
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, isAdmin, isLead, isMember }}>
       {children}
     </AuthContext.Provider>
   );
