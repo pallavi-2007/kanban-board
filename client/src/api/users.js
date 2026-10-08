@@ -9,3 +9,8 @@ export const updateUserRole = async (userId, role) => {
   const response = await api.patch(`/users/${userId}/role`, { role });
   return response.data; // { message, user }
 };
+
+export const deleteUserApi = async (userId) => {
+  const response = await api.delete(`/users/${userId}`);
+  return response.data; // { message }
+};

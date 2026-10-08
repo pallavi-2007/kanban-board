@@ -11,10 +11,11 @@ import {
   AlertCircle,
   Trash2,
   UserCog,
-  Loader2
+  Loader2,
+  UserX
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { fetchUsers, updateUserRole } from '../api/users.js';
+import { fetchUsers, updateUserRole, deleteUserApi } from '../api/users.js';
 import { fetchBoards, addBoardMember, removeBoardMember } from '../api/boards.js';
 import Sidebar from '../components/Sidebar.jsx';
 import Loader from '../components/Loader.jsx';
@@ -92,7 +93,8 @@ const RowActionsMenu = ({
   isLead,
   hasRemovableBoards,
   onChangeRole,
-  onRemoveFromBoard
+  onRemoveFromBoard,
+  onDeleteUser
 }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
@@ -108,16 +110,18 @@ const RowActionsMenu = ({
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [open]);
 
-  // Determine which actions are available
-  // An admin cannot change their own role, and self-removal is hidden on own row
+  // Actions are hidden on the user's own row where it makes no sense
   if (isSelf) {
     return <span className="text-slate-300 select-none">—</span>;
   }
 
-  const canChangeRole = isAdmin;
+  // Admin cannot change the role of an admin row
+  const canChangeRole = isAdmin && user.role !== 'admin';
   const canRemove = hasRemovableBoards;
+  // Admin-only delete user action (not on admin rows or own row)
+  const canDeleteUser = isAdmin && user.role !== 'admin';
 
-  if (!canChangeRole && !canRemove) {
+  if (!canChangeRole && !canRemove && !canDeleteUser) {
     return <span className="text-slate-300 select-none">—</span>;
   }
 
@@ -126,14 +130,14 @@ const RowActionsMenu = ({
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="p-1.5 rounded-lg text-slate-400 hover:text-brand-text hover:bg-slate-100 transition-colors"
+        className="p-1.5 rounded-lg text-slate-400 hover:text-brand-text hover:bg-slate-100 transition-colors cursor-pointer"
         title="More actions"
       >
         <MoreVertical className="w-4 h-4" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-8 z-30 w-44 bg-white rounded-xl border border-brand-border shadow-lg py-1 animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute right-0 top-8 z-30 w-48 bg-white rounded-xl border border-brand-border shadow-lg py-1 animate-in fade-in zoom-in-95 duration-100">
           {canChangeRole && (
             <button
               type="button"
@@ -141,7 +145,7 @@ const RowActionsMenu = ({
                 setOpen(false);
                 onChangeRole(user);
               }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-brand-text hover:bg-slate-50 transition-colors text-left"
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-brand-text hover:bg-slate-50 transition-colors text-left cursor-pointer"
             >
               <UserCog className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
               <span>Change role</span>
@@ -155,10 +159,24 @@ const RowActionsMenu = ({
                 setOpen(false);
                 onRemoveFromBoard(user);
               }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 transition-colors text-left"
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors text-left cursor-pointer"
             >
-              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+              <Trash2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <span>Remove from board</span>
+            </button>
+          )}
+
+          {canDeleteUser && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onDeleteUser(user);
+              }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 transition-colors text-left border-t border-slate-100 cursor-pointer"
+            >
+              <UserX className="w-3.5 h-3.5 shrink-0" />
+              <span>Delete user</span>
             </button>
           )}
         </div>
@@ -177,19 +195,25 @@ const Members = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  // Modals state
+  // Change Role Modal State
   const [roleModalUser, setRoleModalUser] = useState(null);
   const [selectedRole, setSelectedRole] = useState('member');
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
+  // Add Member Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addBoardId, setAddBoardId] = useState('');
   const [addEmail, setAddEmail] = useState('');
   const [isAddingMember, setIsAddingMember] = useState(false);
 
+  // Remove Member Modal State
   const [removeModalUser, setRemoveModalUser] = useState(null);
   const [removeBoardId, setRemoveBoardId] = useState('');
   const [isRemovingMember, setIsRemovingMember] = useState(false);
+
+  // Delete User Modal State
+  const [deleteModalUser, setDeleteModalUser] = useState(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
 
   // Load users & boards
   const loadData = async () => {
@@ -251,7 +275,10 @@ const Members = () => {
 
       // Check if target user is actually a member of board b
       const isMemberOfBoard =
-        targetUser.boards?.some((id) => id.toString() === b._id.toString()) ||
+        targetUser.boards?.some(
+          (item) => (item._id ? item._id.toString() : item.toString()) === b._id.toString()
+        ) ||
+        targetUser.boardIds?.some((id) => id.toString() === b._id.toString()) ||
         b.members?.some((m) => {
           const mUserId = m.user?._id ? m.user._id.toString() : m.user?.toString();
           return mUserId === targetUserId;
@@ -272,7 +299,8 @@ const Members = () => {
   /* ── Change Role Handlers ───────────────────────────────────────────────── */
   const openChangeRoleModal = (user) => {
     setRoleModalUser(user);
-    setSelectedRole(user.role || 'member');
+    // Only lead and member allowed
+    setSelectedRole(user.role === 'lead' ? 'lead' : 'member');
   };
 
   const handleUpdateRole = async (e) => {
@@ -283,9 +311,7 @@ const Members = () => {
       const res = await updateUserRole(roleModalUser._id, selectedRole);
       toast.success(res.message || 'Role updated successfully');
       setRoleModalUser(null);
-      // Refresh user list
-      const updated = await fetchUsers();
-      setUsers(updated.users || []);
+      await loadData();
     } catch (err) {
       const serverMsg = err.response?.data?.message || 'Failed to update user role';
       toast.error(serverMsg);
@@ -323,8 +349,7 @@ const Members = () => {
       toast.success(res.message || 'Member added to board successfully');
       setIsAddModalOpen(false);
       setAddEmail('');
-      // Refresh data
-      loadData();
+      await loadData();
     } catch (err) {
       const serverMsg = err.response?.data?.message || 'Failed to add member to board';
       toast.error(serverMsg);
@@ -351,13 +376,33 @@ const Members = () => {
       const res = await removeBoardMember(removeBoardId, removeModalUser._id);
       toast.success(res.message || 'Member removed from board');
       setRemoveModalUser(null);
-      // Refresh data
-      loadData();
+      await loadData();
     } catch (err) {
       const serverMsg = err.response?.data?.message || 'Failed to remove member from board';
       toast.error(serverMsg);
     } finally {
       setIsRemovingMember(false);
+    }
+  };
+
+  /* ── Delete User Handlers ───────────────────────────────────────────────── */
+  const openDeleteUserModal = (user) => {
+    setDeleteModalUser(user);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteModalUser) return;
+    try {
+      setIsDeletingUser(true);
+      const res = await deleteUserApi(deleteModalUser._id);
+      toast.success(res.message || 'User deleted successfully');
+      setDeleteModalUser(null);
+      await loadData();
+    } catch (err) {
+      const serverMsg = err.response?.data?.message || 'Failed to delete user';
+      toast.error(serverMsg);
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -422,10 +467,11 @@ const Members = () => {
               <button
                 type="button"
                 onClick={openAddMemberModal}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-primary hover:bg-brand-primary-hover text-white text-sm font-semibold shadow-sm shadow-indigo-500/20 transition-all duration-200 shrink-0 cursor-pointer"
+                className="flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2 rounded-xl bg-brand-primary hover:bg-brand-primary-hover text-white text-sm font-semibold shadow-sm shadow-indigo-500/20 transition-all duration-200 shrink-0 cursor-pointer"
+                title="Add Member"
               >
                 <Plus className="w-4 h-4" />
-                <span className="hidden xs:inline">Add Member</span>
+                <span className="hidden sm:inline">Add Member</span>
               </button>
             )}
           </div>
@@ -479,12 +525,13 @@ const Members = () => {
             <div className="max-w-7xl mx-auto">
               <div className="bg-white rounded-2xl border border-brand-border shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[650px]">
+                  <table className="w-full text-left border-collapse min-w-[780px]">
                     <thead>
                       <tr className="bg-slate-50/80 border-b border-brand-border text-xs font-semibold text-brand-text-secondary uppercase tracking-wider select-none">
                         <th className="px-6 py-3.5">Name</th>
                         <th className="px-6 py-3.5">Email</th>
                         <th className="px-6 py-3.5">Role</th>
+                        <th className="px-6 py-3.5">Boards</th>
                         <th className="px-6 py-3.5">Joined Date</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
                       </tr>
@@ -494,6 +541,7 @@ const Members = () => {
                         const isSelf = u._id?.toString() === currentUser?._id?.toString();
                         const removableBoards = getRemovableBoardsForUser(u);
                         const hasRemovable = removableBoards.length > 0;
+                        const userBoardsList = Array.isArray(u.boards) ? u.boards : [];
 
                         return (
                           <tr
@@ -535,8 +583,36 @@ const Members = () => {
                               <RoleBadge role={u.role || 'member'} />
                             </td>
 
+                            {/* Boards Column */}
+                            <td className="px-6 py-4">
+                              {userBoardsList.length === 0 ? (
+                                <span className="text-slate-400 text-xs italic">
+                                  No boards
+                                </span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1.5 max-w-xs">
+                                  {userBoardsList.map((b, idx) => {
+                                    const boardTitle = b.title || 'Untitled Board';
+                                    const boardOwner = b.ownerName || 'Unknown';
+                                    return (
+                                      <span
+                                        key={b._id || idx}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80"
+                                      >
+                                        <span className="font-semibold">{boardTitle}</span>
+                                        <span className="text-slate-400">·</span>
+                                        <span className="text-slate-500">
+                                          Lead: {boardOwner}
+                                        </span>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </td>
+
                             {/* Joined Date */}
-                            <td className="px-6 py-4 text-slate-500 text-xs">
+                            <td className="px-6 py-4 text-slate-500 text-xs whitespace-nowrap">
                               {formatDate(u.createdAt)}
                             </td>
 
@@ -550,6 +626,7 @@ const Members = () => {
                                 hasRemovableBoards={hasRemovable}
                                 onChangeRole={openChangeRoleModal}
                                 onRemoveFromBoard={openRemoveMemberModal}
+                                onDeleteUser={openDeleteUserModal}
                               />
                             </td>
                           </tr>
@@ -603,7 +680,7 @@ const Members = () => {
                 </div>
               </div>
 
-              {/* Role Select Dropdown */}
+              {/* Role Select Dropdown: Lead and Member only (No Admin) */}
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-brand-text-secondary mb-2">
                   New Role
@@ -613,7 +690,6 @@ const Members = () => {
                   onChange={(e) => setSelectedRole(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-text text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary"
                 >
-                  <option value="admin">Admin — Full system management</option>
                   <option value="lead">Lead — Create & manage owned boards</option>
                   <option value="member">Member — Move cards & subtasks</option>
                 </select>
@@ -830,6 +906,61 @@ const Members = () => {
                     </>
                   ) : (
                     <span>Remove Member</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete User Confirmation Modal (Admin Only) ────────────────────── */}
+      {deleteModalUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl border border-brand-border shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-brand-border flex items-center justify-between">
+              <h3 className="font-bold text-lg text-brand-text">Delete User</h3>
+              <button
+                type="button"
+                onClick={() => setDeleteModalUser(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-brand-text-secondary leading-relaxed">
+                Delete{' '}
+                <strong className="text-brand-text font-semibold">
+                  {deleteModalUser.name}
+                </strong>
+                ? This removes the account and their board access. This cannot be undone.
+              </p>
+
+              {/* Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalUser(null)}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-brand-text-secondary hover:text-brand-text hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingUser}
+                  onClick={handleDeleteUser}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer shadow-sm shadow-rose-500/20"
+                >
+                  {isDeletingUser ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Deleting…</span>
+                    </>
+                  ) : (
+                    <span>Delete</span>
                   )}
                 </button>
               </div>

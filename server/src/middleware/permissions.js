@@ -277,9 +277,10 @@ export const requirePermission = (action) => async (req, res, next) => {
         break;
       }
 
-      case 'users:manageRole': {
+      case 'users:manageRole':
+      case 'users:delete': {
         if (!isUserAdmin(user)) {
-          throw new AppError('Forbidden: Only administrators can update user roles', 403);
+          throw new AppError('Forbidden: Only administrators can perform this user action', 403);
         }
         break;
       }
