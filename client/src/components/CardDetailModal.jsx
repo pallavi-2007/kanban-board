@@ -46,7 +46,12 @@ const CardDetailModal = ({
   boardMembers = [],
   onClose,
   onCardUpdated,
-  onCardDeleted
+  onCardDeleted,
+  canEditDetails = false,
+  canManageAssignees = false,
+  canDeleteCard = false,
+  canRunAi = false,
+  canTickChecklist = false
 }) => {
   const [aiLoading, setAiLoading] = useState(false);
   const [updatingChecklist, setUpdatingChecklist] = useState(false);
@@ -90,6 +95,7 @@ const CardDetailModal = ({
 
   const handleSaveTitle = async (e) => {
     e?.preventDefault();
+    if (!canEditDetails) return;
     const trimmed = titleInput.trim();
     if (!trimmed) {
       toast.error('Card title cannot be empty');
@@ -116,6 +122,7 @@ const CardDetailModal = ({
   };
 
   const handleSaveDesc = async () => {
+    if (!canEditDetails) return;
     const trimmed = descInput.trim();
     if (trimmed === (card.description || '')) {
       setIsEditingDesc(false);
@@ -138,6 +145,7 @@ const CardDetailModal = ({
   };
 
   const handleDeleteCard = async () => {
+    if (!canDeleteCard) return;
     try {
       setDeletingCard(true);
       await deleteCardApi(card._id);
@@ -153,6 +161,7 @@ const CardDetailModal = ({
   };
 
   const handleToggleAssignee = async (memberUserId) => {
+    if (!canManageAssignees) return;
     if (updatingAssignees) return;
 
     const currentAssigneeIds = (card.assignees || []).map((u) =>
@@ -197,6 +206,7 @@ const CardDetailModal = ({
   };
 
   const handleToggleChecklistItem = async (index) => {
+    if (!canTickChecklist) return;
     if (updatingChecklist) return;
 
     const previousChecklist = [...checklist];
@@ -239,6 +249,7 @@ const CardDetailModal = ({
   };
 
   const handleAiBreakdown = async () => {
+    if (!canRunAi) return;
     if (aiLoading) return;
 
     try {
@@ -283,8 +294,8 @@ const CardDetailModal = ({
               </div>
             )}
 
-            {/* Editable Title */}
-            {isEditingTitle ? (
+            {/* Title: Editable or Read-only */}
+            {canEditDetails && isEditingTitle ? (
               <form onSubmit={handleSaveTitle} className="flex items-center gap-2">
                 <input
                   type="text"
@@ -303,7 +314,7 @@ const CardDetailModal = ({
                 <button
                   type="submit"
                   disabled={savingTitle}
-                  className="px-3 py-1 bg-brand-primary text-white text-xs font-semibold rounded-xl hover:bg-brand-primary-hover disabled:opacity-50"
+                  className="px-3 py-1 bg-brand-primary text-white text-xs font-semibold rounded-xl hover:bg-brand-primary-hover disabled:opacity-50 cursor-pointer"
                 >
                   {savingTitle ? 'Saving...' : 'Save'}
                 </button>
@@ -313,7 +324,7 @@ const CardDetailModal = ({
                     setIsEditingTitle(false);
                     setTitleInput(card.title);
                   }}
-                  className="px-2.5 py-1 bg-slate-200 text-brand-text text-xs font-semibold rounded-xl hover:bg-slate-300"
+                  className="px-2.5 py-1 bg-slate-200 text-brand-text text-xs font-semibold rounded-xl hover:bg-slate-300 cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -321,26 +332,32 @@ const CardDetailModal = ({
             ) : (
               <div className="flex items-center gap-2 group/title">
                 <h2
-                  onClick={() => setIsEditingTitle(true)}
-                  className="text-lg font-bold text-brand-text leading-snug break-words cursor-pointer hover:bg-slate-200/50 px-1 -mx-1 rounded-lg transition-colors"
-                  title="Click to edit title"
+                  onClick={() => canEditDetails && setIsEditingTitle(true)}
+                  className={`text-lg font-bold text-brand-text leading-snug break-words ${
+                    canEditDetails
+                      ? 'cursor-pointer hover:bg-slate-200/50 px-1 -mx-1 rounded-lg transition-colors'
+                      : ''
+                  }`}
+                  title={canEditDetails ? 'Click to edit title' : ''}
                 >
                   {card.title}
                 </h2>
-                <button
-                  onClick={() => setIsEditingTitle(true)}
-                  className="opacity-0 group-hover/title:opacity-100 p-1 text-brand-text-muted hover:text-brand-text transition-opacity"
-                  title="Edit title"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
+                {canEditDetails && (
+                  <button
+                    onClick={() => setIsEditingTitle(true)}
+                    className="opacity-0 group-hover/title:opacity-100 p-1 text-brand-text-muted hover:text-brand-text transition-opacity cursor-pointer"
+                    title="Edit title"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             )}
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-brand-text-secondary hover:text-brand-text hover:bg-slate-200/60 transition-colors shrink-0"
+            className="p-1.5 rounded-xl text-brand-text-secondary hover:text-brand-text hover:bg-slate-200/60 transition-colors shrink-0 cursor-pointer"
             title="Close modal"
           >
             <X className="w-5 h-5" />
@@ -361,67 +378,89 @@ const CardDetailModal = ({
             </div>
           )}
 
-          {/* Assignees Section – with interactive member toggles */}
+          {/* Assignees Section */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-brand-text-secondary uppercase tracking-wider block flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-brand-text-muted" /> Assignees
               </span>
-              <span className="text-[11px] text-brand-text-muted">
-                Click member to assign / unassign
-              </span>
+              {canManageAssignees && (
+                <span className="text-[11px] text-brand-text-muted">
+                  Click member to assign / unassign
+                </span>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {boardMembers.length > 0 ? (
-                boardMembers.map((member) => {
-                  const u = member.user;
-                  const isAssigned = (card.assignees || []).some(
-                    (a) => (typeof a === 'string' ? a : a._id) === u._id
-                  );
-                  return (
-                    <button
-                      key={u._id}
-                      type="button"
-                      onClick={() => handleToggleAssignee(u._id)}
-                      disabled={updatingAssignees}
-                      className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-                        isAssigned
-                          ? 'bg-brand-primary-light border-brand-primary/40 text-brand-primary shadow-xs'
-                          : 'bg-white border-brand-border text-brand-text-secondary hover:bg-slate-50 hover:text-brand-text'
-                      }`}
-                      title={isAssigned ? `Unassign ${u.name}` : `Assign ${u.name}`}
-                    >
-                      <MemberAvatar user={u} size="sm" />
-                      <span>{u.name}</span>
-                      {isAssigned && <Check className="w-3.5 h-3.5 text-brand-primary shrink-0" />}
-                    </button>
-                  );
-                })
+              {canManageAssignees ? (
+                boardMembers.length > 0 ? (
+                  boardMembers.map((member) => {
+                    const u = member.user;
+                    const isAssigned = (card.assignees || []).some(
+                      (a) => (typeof a === 'string' ? a : a._id) === u._id
+                    );
+                    return (
+                      <button
+                        key={u._id}
+                        type="button"
+                        onClick={() => handleToggleAssignee(u._id)}
+                        disabled={updatingAssignees}
+                        className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                          isAssigned
+                            ? 'bg-brand-primary-light border-brand-primary/40 text-brand-primary shadow-xs'
+                            : 'bg-white border-brand-border text-brand-text-secondary hover:bg-slate-50 hover:text-brand-text'
+                        }`}
+                        title={isAssigned ? `Unassign ${u.name}` : `Assign ${u.name}`}
+                      >
+                        <MemberAvatar user={u} size="sm" />
+                        <span>{u.name}</span>
+                        {isAssigned && <Check className="w-3.5 h-3.5 text-brand-primary shrink-0" />}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <span className="text-xs text-brand-text-muted italic">No board members found</span>
+                )
               ) : (
-                <span className="text-xs text-brand-text-muted italic">No board members found</span>
+                /* Read-only assignees */
+                (card.assignees || []).length > 0 ? (
+                  (card.assignees || []).map((a) => {
+                    const u = typeof a === 'string' ? boardMembers.find((m) => m.user._id === a)?.user || { _id: a, name: 'User' } : a;
+                    return (
+                      <div
+                        key={u._id}
+                        className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-brand-border bg-slate-50 text-xs font-medium text-brand-text"
+                      >
+                        <MemberAvatar user={u} size="sm" />
+                        <span>{u.name}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <span className="text-xs text-brand-text-muted italic">No assignees</span>
+                )
               )}
             </div>
           </div>
 
-          {/* Description Section (Editable) */}
+          {/* Description Section */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold text-brand-text-secondary uppercase tracking-wider flex items-center gap-1.5">
                 <AlignLeft className="w-3.5 h-3.5 text-brand-text-muted" /> Description
               </h3>
-              {!isEditingDesc && (
+              {canEditDetails && !isEditingDesc && (
                 <button
                   type="button"
                   onClick={() => setIsEditingDesc(true)}
-                  className="text-xs text-brand-primary hover:text-brand-primary-hover font-semibold flex items-center gap-1"
+                  className="text-xs text-brand-primary hover:text-brand-primary-hover font-semibold flex items-center gap-1 cursor-pointer"
                 >
                   <Pencil className="w-3 h-3" /> Edit
                 </button>
               )}
             </div>
 
-            {isEditingDesc ? (
+            {canEditDetails && isEditingDesc ? (
               <div className="space-y-2">
                 <textarea
                   value={descInput}
@@ -437,7 +476,7 @@ const CardDetailModal = ({
                     type="button"
                     onClick={handleSaveDesc}
                     disabled={savingDesc}
-                    className="px-3.5 py-1.5 bg-brand-primary text-white text-xs font-semibold rounded-xl hover:bg-brand-primary-hover transition-colors disabled:opacity-50"
+                    className="px-3.5 py-1.5 bg-brand-primary text-white text-xs font-semibold rounded-xl hover:bg-brand-primary-hover transition-colors disabled:opacity-50 cursor-pointer"
                   >
                     {savingDesc ? 'Saving...' : 'Save Description'}
                   </button>
@@ -447,7 +486,7 @@ const CardDetailModal = ({
                       setIsEditingDesc(false);
                       setDescInput(card.description || '');
                     }}
-                    className="px-3.5 py-1.5 bg-slate-200 text-brand-text text-xs font-semibold rounded-xl hover:bg-slate-300 transition-colors"
+                    className="px-3.5 py-1.5 bg-slate-200 text-brand-text text-xs font-semibold rounded-xl hover:bg-slate-300 transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -455,14 +494,18 @@ const CardDetailModal = ({
               </div>
             ) : (
               <div
-                onClick={() => setIsEditingDesc(true)}
-                className="p-3.5 bg-slate-50/80 hover:bg-slate-100/60 transition-colors rounded-xl border border-brand-border text-sm text-brand-text leading-relaxed whitespace-pre-wrap cursor-pointer"
-                title="Click to edit description"
+                onClick={() => canEditDetails && setIsEditingDesc(true)}
+                className={`p-3.5 bg-slate-50/80 rounded-xl border border-brand-border text-sm text-brand-text leading-relaxed whitespace-pre-wrap ${
+                  canEditDetails ? 'hover:bg-slate-100/60 transition-colors cursor-pointer' : ''
+                }`}
+                title={canEditDetails ? 'Click to edit description' : ''}
               >
                 {card.description?.trim() ? (
                   card.description
                 ) : (
-                  <span className="text-brand-text-muted italic">Click to add a description...</span>
+                  <span className="text-brand-text-muted italic">
+                    {canEditDetails ? 'Click to add a description...' : 'No description'}
+                  </span>
                 )}
               </div>
             )}
@@ -482,25 +525,27 @@ const CardDetailModal = ({
                 )}
               </div>
 
-              {/* Break down with AI button */}
-              <button
-                type="button"
-                onClick={handleAiBreakdown}
-                disabled={aiLoading}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-brand-primary to-indigo-600 text-white text-xs font-semibold shadow-sm hover:from-brand-primary-hover hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {aiLoading ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Breaking down...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                    <span>Break down with AI</span>
-                  </>
-                )}
-              </button>
+              {/* Break down with AI button – shown only if canRunAi */}
+              {canRunAi && (
+                <button
+                  type="button"
+                  onClick={handleAiBreakdown}
+                  disabled={aiLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-brand-primary to-indigo-600 text-white text-xs font-semibold shadow-sm hover:from-brand-primary-hover hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {aiLoading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Breaking down...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                      <span>Break down with AI</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Progress bar */}
@@ -517,7 +562,9 @@ const CardDetailModal = ({
             <div className="space-y-2 pt-1">
               {totalItems === 0 ? (
                 <div className="py-6 px-4 text-center text-xs text-brand-text-muted border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                  No subtasks yet. Click &quot;Break down with AI&quot; to generate actionable subtasks.
+                  {canRunAi
+                    ? 'No subtasks yet. Click "Break down with AI" to generate actionable subtasks.'
+                    : 'No subtasks yet.'}
                 </div>
               ) : (
                 checklist.map((item, idx) => {
@@ -525,15 +572,20 @@ const CardDetailModal = ({
                   return (
                     <div
                       key={item._id || idx}
-                      onClick={() => handleToggleChecklistItem(idx)}
-                      className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
+                      onClick={() => canTickChecklist && handleToggleChecklistItem(idx)}
+                      className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all select-none ${
+                        canTickChecklist
+                          ? 'cursor-pointer hover:border-brand-primary/40 hover:bg-slate-50/50'
+                          : 'cursor-default'
+                      } ${
                         item.done
                           ? 'bg-slate-50/70 border-slate-200 text-brand-text-muted'
-                          : 'bg-white border-brand-border text-brand-text hover:border-brand-primary/40 hover:bg-slate-50/50'
+                          : 'bg-white border-brand-border text-brand-text'
                       }`}
                     >
                       <button
                         type="button"
+                        disabled={!canTickChecklist}
                         className="mt-0.5 text-brand-primary shrink-0 focus:outline-none"
                         tabIndex={-1}
                       >
@@ -561,35 +613,37 @@ const CardDetailModal = ({
         {/* Modal Footer with Delete & Close */}
         <div className="px-6 py-3 border-t border-brand-border bg-slate-50 flex items-center justify-between gap-3">
           <div>
-            {isConfirmingDelete ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-red-600 font-semibold">Delete card?</span>
+            {canDeleteCard && (
+              isConfirmingDelete ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-red-600 font-semibold">Delete card?</span>
+                  <button
+                    type="button"
+                    onClick={handleDeleteCard}
+                    disabled={deletingCard}
+                    className="px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    {deletingCard ? 'Deleting...' : 'Yes, Delete'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDelete(false)}
+                    disabled={deletingCard}
+                    className="px-3 py-1.5 rounded-xl bg-slate-200 text-brand-text text-xs font-semibold hover:bg-slate-300 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={handleDeleteCard}
-                  disabled={deletingCard}
-                  className="px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors"
+                  onClick={() => setIsConfirmingDelete(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-red-600 hover:bg-red-50 text-xs font-semibold border border-red-200 transition-colors cursor-pointer"
                 >
-                  {deletingCard ? 'Deleting...' : 'Yes, Delete'}
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Card</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setIsConfirmingDelete(false)}
-                  disabled={deletingCard}
-                  className="px-3 py-1.5 rounded-xl bg-slate-200 text-brand-text text-xs font-semibold hover:bg-slate-300 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setIsConfirmingDelete(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-red-600 hover:bg-red-50 text-xs font-semibold border border-red-200 transition-colors cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Card</span>
-              </button>
+              )
             )}
           </div>
 

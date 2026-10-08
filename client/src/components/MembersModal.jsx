@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Users, Mail, UserPlus, Loader2, ShieldCheck, Shield } from 'lucide-react';
+import { X, Users, Mail, UserPlus, Loader2, ShieldCheck, Shield, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { addBoardMember } from '../api/boards.js';
+import { addBoardMember, removeBoardMember } from '../api/boards.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const MemberAvatar = ({ user, size = 'sm', title }) => {
@@ -30,10 +30,17 @@ const MemberAvatar = ({ user, size = 'sm', title }) => {
   );
 };
 
-const MembersModal = ({ board, isOpen, onClose, onBoardUpdated }) => {
+const MembersModal = ({
+  board,
+  isOpen,
+  onClose,
+  onBoardUpdated,
+  canManageBoard: canManageProp
+}) => {
   const { user: currentUser } = useAuth();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [removingUserId, setRemovingUserId] = useState(null);
 
   if (!isOpen || !board) return null;
 
@@ -47,6 +54,11 @@ const MembersModal = ({ board, isOpen, onClose, onBoardUpdated }) => {
         (typeof m.user === 'string' ? m.user : m.user?._id?.toString()) === currentUserId &&
         m.role === 'owner'
     );
+
+  const canManage =
+    typeof canManageProp === 'boolean'
+      ? canManageProp
+      : (currentUser?.role === 'admin' || (currentUser?.role === 'lead' && isOwner));
 
   const members = board.members || [];
 
@@ -72,6 +84,24 @@ const MembersModal = ({ board, isOpen, onClose, onBoardUpdated }) => {
       toast.error(serverMessage);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleRemoveMember = async (userId) => {
+    if (removingUserId) return;
+    try {
+      setRemovingUserId(userId);
+      const data = await removeBoardMember(board._id, userId);
+      toast.success(data.message || 'Member removed from board');
+      if (data.board) {
+        onBoardUpdated(data.board);
+      }
+    } catch (err) {
+      const serverMessage =
+        err.response?.data?.message || 'Failed to remove member from board';
+      toast.error(serverMessage);
+    } finally {
+      setRemovingUserId(null);
     }
   };
 
@@ -108,8 +138,8 @@ const MembersModal = ({ board, isOpen, onClose, onBoardUpdated }) => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Invite by Email (Owner Only) */}
-          {isOwner && (
+          {/* Invite by Email – only visible to users who may manage the board */}
+          {canManage && (
             <div className="p-4 rounded-xl bg-slate-50 border border-brand-border space-y-2.5">
               <span className="text-xs font-semibold text-brand-text-secondary uppercase tracking-wider block flex items-center gap-1.5">
                 <UserPlus className="w-3.5 h-3.5 text-brand-primary" /> Invite by email
@@ -144,7 +174,7 @@ const MembersModal = ({ board, isOpen, onClose, onBoardUpdated }) => {
             </div>
           )}
 
-          {/* Members List */}
+          {/* Members List – visible to all */}
           <div className="space-y-2">
             <span className="text-xs font-semibold text-brand-text-secondary uppercase tracking-wider block">
               Current Members
@@ -153,9 +183,14 @@ const MembersModal = ({ board, isOpen, onClose, onBoardUpdated }) => {
               {members.map((member) => {
                 const u = member.user;
                 const memberRole = member.role || 'member';
+                const uId = u?._id ? u._id.toString() : u?.toString();
+                const isOwnerUser = uId === ownerId;
+                const isSelf = uId === currentUserId;
+                const canRemoveThisUser = canManage && !isOwnerUser && !isSelf;
+
                 return (
                   <div
-                    key={u._id}
+                    key={uId}
                     className="pt-2 first:pt-0 flex items-center justify-between gap-3 py-1.5"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -170,7 +205,7 @@ const MembersModal = ({ board, isOpen, onClose, onBoardUpdated }) => {
                       </div>
                     </div>
 
-                    <div className="shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       {memberRole === 'owner' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 uppercase tracking-wide">
                           <ShieldCheck className="w-3 h-3" />
@@ -181,6 +216,22 @@ const MembersModal = ({ board, isOpen, onClose, onBoardUpdated }) => {
                           <Shield className="w-3 h-3 text-slate-400" />
                           Member
                         </span>
+                      )}
+
+                      {canRemoveThisUser && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMember(uId)}
+                          disabled={removingUserId === uId}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                          title={`Remove ${u.name} from board`}
+                        >
+                          {removingUserId === uId ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-red-600" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
                       )}
                     </div>
                   </div>
