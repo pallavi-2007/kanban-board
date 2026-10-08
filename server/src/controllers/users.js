@@ -10,12 +10,10 @@ export const getUsers = async (req, res, next) => {
       throw new AppError('Forbidden: Members cannot view user directory', 403);
     }
 
+    let users;
     if (userRole === 'admin') {
-      const users = await User.find().select('-passwordHash').sort({ name: 1 });
-      return res.status(200).json({ users });
-    }
-
-    if (userRole === 'lead') {
+      users = await User.find().select('-passwordHash').sort({ name: 1 }).lean();
+    } else if (userRole === 'lead') {
       // Lead gets only users on their boards
       const boards = await Board.find({
         $or: [
@@ -34,14 +32,40 @@ export const getUsers = async (req, res, next) => {
       // Include the lead themselves
       userIds.add(req.user._id.toString());
 
-      const users = await User.find({ _id: { $in: Array.from(userIds) } })
+      users = await User.find({ _id: { $in: Array.from(userIds) } })
         .select('-passwordHash')
-        .sort({ name: 1 });
-
-      return res.status(200).json({ users });
+        .sort({ name: 1 })
+        .lean();
+    } else {
+      throw new AppError('Forbidden', 403);
     }
 
-    throw new AppError('Forbidden', 403);
+    // Attach the ids of the boards each user belongs to
+    const allBoards = await Board.find({}).select('_id members.user owner');
+    const userBoardMap = {};
+    allBoards.forEach((b) => {
+      const bId = b._id;
+      const memberUserIds = new Set(
+        b.members.map((m) => (m.user?._id ? m.user._id.toString() : m.user?.toString())).filter(Boolean)
+      );
+      if (b.owner) {
+        const ownerId = b.owner._id ? b.owner._id.toString() : b.owner.toString();
+        memberUserIds.add(ownerId);
+      }
+      memberUserIds.forEach((uId) => {
+        if (!userBoardMap[uId]) userBoardMap[uId] = [];
+        userBoardMap[uId].push(bId);
+      });
+    });
+
+    const populatedUsers = users.map((u) => ({
+      ...u,
+      role: u.role || 'member',
+      boards: userBoardMap[u._id.toString()] || [],
+      boardIds: userBoardMap[u._id.toString()] || []
+    }));
+
+    return res.status(200).json({ users: populatedUsers });
   } catch (error) {
     next(error);
   }
