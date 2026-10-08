@@ -12,6 +12,7 @@ export const getBoards = async (req, res, next) => {
     const filter = userRole === 'admin' ? {} : { 'members.user': req.user._id };
 
     const boards = await Board.find(filter)
+      .populate('owner', 'name email')
       .populate('members.user', 'name email role')
       .sort({ updatedAt: -1 });
 

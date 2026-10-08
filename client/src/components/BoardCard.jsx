@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, MoreVertical } from 'lucide-react';
+import { MoreVertical, Pencil, Trash2 } from 'lucide-react';
 
 const GRADIENTS = [
   'from-blue-400 to-indigo-500',
@@ -11,16 +11,38 @@ const GRADIENTS = [
   'from-yellow-400 to-amber-500',
 ];
 
-const BoardCard = ({ board, index = 0 }) => {
+/**
+ * BoardCard
+ *
+ * Props:
+ *   board        – board object (with owner populated for admin)
+ *   index        – position in list (for gradient)
+ *   showMenu     – boolean: whether the three-dot menu should appear at all
+ *   showOwner    – boolean: show "Owner: <name>" line (admin only)
+ *   onEdit       – (board) => void
+ *   onDelete     – (board) => void
+ */
+const BoardCard = ({ board, index = 0, showMenu = false, showOwner = false, onEdit, onDelete }) => {
   const navigate = useNavigate();
   const gradient = GRADIENTS[index % GRADIENTS.length];
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
   const members = board.members || [];
   const memberCount = members.length;
 
-  const handleClick = () => {
-    navigate(`/boards/${board._id}`);
-  };
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
 
   const formatDate = (dateString) => {
     if (!dateString) return 'recently';
@@ -33,9 +55,11 @@ const BoardCard = ({ board, index = 0 }) => {
     return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
   };
 
+  const ownerName = board.owner?.name || board.owner?.email || null;
+
   return (
     <div
-      onClick={handleClick}
+      onClick={() => navigate(`/boards/${board._id}`)}
       className="group bg-brand-surface rounded-2xl border border-brand-border overflow-hidden shadow-sm hover:shadow-md hover:border-brand-primary/40 transition-all duration-200 cursor-pointer flex flex-col"
     >
       {/* Top Banner Gradient */}
@@ -47,15 +71,63 @@ const BoardCard = ({ board, index = 0 }) => {
           <h3 className="font-semibold text-brand-text text-base leading-snug group-hover:text-brand-primary transition-colors line-clamp-1">
             {board.title}
           </h3>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-            className="text-brand-text-muted hover:text-brand-text p-1 rounded-lg hover:bg-slate-100 transition-colors shrink-0"
-          >
-            <MoreVertical className="w-4 h-4" />
-          </button>
+
+          {/* Three-dot menu */}
+          {showMenu && (
+            <div className="relative shrink-0" ref={menuRef}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen((o) => !o);
+                }}
+                className="text-brand-text-muted hover:text-brand-text p-1 rounded-lg hover:bg-slate-100 transition-colors"
+                title="Board options"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
+              {menuOpen && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute right-0 top-7 z-20 w-36 bg-white rounded-xl border border-brand-border shadow-lg py-1 animate-in fade-in zoom-in-95 duration-100"
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpen(false);
+                      onEdit?.(board);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-brand-text hover:bg-slate-50 transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpen(false);
+                      onDelete?.(board);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Owner line (admin only) */}
+        {showOwner && ownerName && (
+          <p className="text-[11px] text-brand-text-muted mt-0.5">
+            Owner: <span className="font-medium text-brand-text-secondary">{ownerName}</span>
+          </p>
+        )}
 
         {board.description && (
           <p className="text-xs text-brand-text-secondary line-clamp-2 mt-1 mb-2">
